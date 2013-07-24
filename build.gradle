@@ -1,0 +1,14 @@
+def lines = new File("wolphin/setup.py").readLines()
+def pattern = ~/^__version__\s*=\s*['"]([^\s]+)["']/
+def version = lines*.find(pattern, {match, version -> return version}).find()
+
+if (!version) {
+    throw new ResourceException("Unable to parse __version__ from wolphin/setup.py")
+}
+
+project.version = version
+project.description = "Wolphin uses its cousin Boto, to manage the Amazon ec2 instances for your projects."
+project.ext.dists = ["wolphin"]
+
+apply from: "${System.getenv().GRADLE_COMMON}/plugins/python/python.gradle"
+
