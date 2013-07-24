@@ -151,12 +151,14 @@ ec2 instances:
 
 
 All operations with the exception of create can also be performed on a single or only selected
- instances under a project than the project as a whole: e.g. :
+ instances under a project than the project as a whole: e.g.:
+
     project = WolphinProject(configuration(project='project', ....))
     project.start(instances_numbers=[1, 2])
 
  would only start instances ``wolphin.project.2`` and ``wolphin.project.1``.
  The ``wolphin_project`` generator can also be used in a similar fashion:
+
     for _ in wolphin_project(project, instances_numbers=[1, 2]):
         run("uname -aimnprsv")
 
