@@ -1,6 +1,6 @@
 Wolphin
 =======
-A Python library (and some scripts) that manages ec2 instances.
+A Python library that manages ec2 instances.
 
 ----
 Motivation
@@ -64,9 +64,9 @@ Wolphin is stateless, i.e. no state about the project is maintained locally, oth
 configuration files made available to wolphin. All operations are done based on this configuration
 information and the metadata with which ec2 instance sare tagged.
 
-### Wolphin lib:
+### Wolphin library:
 
-The following capabilities would be available through the library part of wolphin:
+The following operations can be performed using wolphin:
 
 #### create
 
@@ -146,9 +146,15 @@ ec2 instances:
                                            project="project",
                                            email="email@example.com",
                                            user_config_file=user_ec2_args_file))
+    # create instances under the project.
+    project.create()
+    
+    # run a fabric task on the project (all ec2 instances os it).
     for _ in wolphin_project(project):
         run("uname -aimnprsv")
-
+    
+    # terminate the project(all its instances).
+    project.terminate()
 
 All operations with the exception of create can also be performed on a single or only selected
  instances under a project than the project as a whole: e.g.:
@@ -157,6 +163,7 @@ All operations with the exception of create can also be performed on a single or
     project.start(instances_numbers=[1, 2])
 
  would only start instances ``wolphin.project.2`` and ``wolphin.project.1``.
+ 
  The ``wolphin_project`` generator can also be used in a similar fashion:
 
     for _ in wolphin_project(project, instances_numbers=[1, 2]):
@@ -184,7 +191,7 @@ names of resources e.g. .pem file to use, etc., should be provided as a part of 
  The typical limit per account per region is 20. All wolphin projects in the same region
 contribute to the upper limit of the instances available at any point. We may need to either get
 this number increased or try a different region when configuring the project.
-4. Wolphin is a best effort system, i.e. it will try to take care of all messed up states of
+5. Wolphin is a best effort system, i.e. it will try to take care of all messed up states of
 instances in a wolphin project but its not very robust against really crazy scenarios e.g. create
 a project with 15 instances, in the middle of it break and terminate 2 of them, then run create
 again for 5 instances, break again and then run again for 10. Wolphin will try its best but the
