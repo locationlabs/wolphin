@@ -1,6 +1,6 @@
-import uuid
 """Mocks those parts of boto that are needed by wolphin"""
 
+import uuid
 import datetime
 
 from boto.exception import EC2ResponseError
