@@ -137,19 +137,30 @@ Wolphin also provides a generator that can be used to iterate over the ec2 insta
 any project. A typical usage scenario would be to use this generator to execute fabric tasks on various
 ec2 instances:
 
+    from wolphin.project import WolphinProject
+    from wolphin.config import configuration
     from wolphin.generator import wolphin_project
+    from fabric.api import run
 
     project = WolphinProject(configuration(auth_credentials_file=auth_credentials_file,
                                            project="project",
                                            email="email@example.com",
                                            user_config_file=user_ec2_args_file))
-    for _ in wolphin_project(project, instance_numbers=[1, 2]):
+    for _ in wolphin_project(project):
         run("uname -aimnprsv")
 
 
-> All operations with the exception of create can also be performed on a single instance under a
-project than the project as a whole: e.g. ``wolphin project start --instance 2 ..`` (and the
-function call equivalent of it) would only start instance ``wolphin.project.2`` .
+All operations with the exception of create can also be performed on a single or only selected
+ instances under a project than the project as a whole: e.g. :
+    project = WolphinProject(configuration(project='project', ....))
+    project.start(instances_numbers=[1, 2])
+
+ would only start instances ``wolphin.project.2`` and ``wolphin.project.1``.
+ The ``wolphin_project`` generator can also be used in a similar fashion:
+    for _ in wolphin_project(project, instances_numbers=[1, 2]):
+        run("uname -aimnprsv")
+
+ to do ``run("uname -aimnprsv")`` on instances ``wolphin.project.2`` and ``wolphin.project.1`` only.
 
 ### Example Script
 
