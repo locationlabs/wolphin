@@ -80,7 +80,7 @@ def controller():
         status_info = project.create()
     elif args.command == "info":
         for _ in wolphin_project(project, instance_numbers=args.project_instances):
-            run("uname -aimnprsv; users; cat ~/.ssh/authorized_keys; ifconfig -a; pwd; ls -al")
+            run("uname -a; users; cat ~/.ssh/authorized_keys; ifconfig -a; pwd; ls -al")
     elif args.command == "start":
         status_info = project.start(instance_numbers=args.project_instances)
     elif args.command == "stop":

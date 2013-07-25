@@ -62,7 +62,7 @@ ec2 instances goes.
 
 Wolphin is stateless, i.e. no state about the project is maintained locally, other than the
 configuration files made available to wolphin. All operations are done based on this configuration
-information and the metadata with which ec2 instance sare tagged.
+information and the metadata with which ec2 instances are tagged.
 
 ### Wolphin library:
 
@@ -148,11 +148,11 @@ ec2 instances:
                                            user_config_file=user_ec2_args_file))
     # create instances under the project.
     project.create()
-    
+
     # run a fabric task on the project (all ec2 instances os it).
     for _ in wolphin_project(project):
-        run("uname -aimnprsv")
-    
+        run("uname -a")
+
     # terminate the project(all its instances).
     project.terminate()
 
@@ -163,13 +163,13 @@ All operations with the exception of create can also be performed on a single or
     project.start(instances_numbers=[1, 2])
 
  would only start instances ``wolphin.project.2`` and ``wolphin.project.1``.
- 
+
  The ``wolphin_project`` generator can also be used in a similar fashion:
 
     for _ in wolphin_project(project, instances_numbers=[1, 2]):
-        run("uname -aimnprsv")
+        run("uname -a")
 
- to do ``run("uname -aimnprsv")`` on instances ``wolphin.project.2`` and ``wolphin.project.1`` only.
+ to do ``run("uname -a")`` on instances ``wolphin.project.2`` and ``wolphin.project.1`` only.
 
 ### Example Script
 
