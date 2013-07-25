@@ -9,19 +9,20 @@ __build__ = ''
 
 setup(name='wolphin',
       version=__version__ + __build__,
-      description='Wolphin is a cousin of Boto. \
-                   It can manages Amazon ec2 instances for your project.',
-      author='Shivanshu Singh',
-      author_email='sks@locationlabs.com',
+      description='Wolphin is a cousin of Boto. '
+                  'It can manages Amazon ec2 instances for your project.',
+      author='Location Labs',
+      author_email='info@locationlabs.com',
       url='http://locationlabs.com',
       packages=find_packages(exclude=['*.tests']),
       setup_requires=[
           'nose>=1.0',
+      ],
+      install_requires=[
           'boto>=2.9.7',
           'Fabric>=1.4.3',
           'gusset>=1.2'
       ],
-      install_requires=[],
       tests_require=[
           'mock>=1.0'
       ],

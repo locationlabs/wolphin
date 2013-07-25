@@ -25,7 +25,7 @@ INSTANCE_AVAILABILITYZONE = 'us-west-1b'
 MIN_INSTANCE_COUNT = 1
 
 # Max number of instances to be spawned
-MAX_INSTANCE_COUNT = 7
+MAX_INSTANCE_COUNT = 5
 
 # Maximum duration in seconds for which to wait each time when waiting for state transitions
 MAX_WAIT_DURATION = 5
