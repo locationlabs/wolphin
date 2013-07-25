@@ -24,7 +24,7 @@ class WolphinProject(object):
             'terminated': 48
         }
 
-        validator = validate if config_validator is None else config_validator
+        validator = config_validator or validate
         valid, err_msg = validator(config)
 
         if not valid:
@@ -32,9 +32,7 @@ class WolphinProject(object):
 
         self.config = config
 
-        if connection is not None:
-            self.conn = connection
-        else:
+        self.conn = connection or \
             connect_to_region(self.config['REGION'],
                               aws_access_key_id=self.config['AWS_ACCESS_KEY_ID'],
                               aws_secret_access_key=self.config['AWS_SECRET_KEY'])

@@ -1,7 +1,8 @@
-from wolphin.exceptions import NoRunningInstances
+from os.path import abspath, expanduser, join
 
 from fabric.api import settings
-from os.path import abspath, expanduser, join
+
+from wolphin.exceptions import NoRunningInstances
 
 
 def wolphin_project(project, instance_numbers=None):

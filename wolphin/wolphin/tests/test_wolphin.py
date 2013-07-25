@@ -1,8 +1,9 @@
+import mock
+from nose.tools import eq_, ok_
+
 from wolphin.project import WolphinProject
 from wolphin.tests.mock_boto import connect_to_region
 
-from nose.tools import eq_, ok_
-import mock
 
 STATES = {
     'pending': 0,

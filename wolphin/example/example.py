@@ -1,18 +1,14 @@
 #!/usr/bin/env python
-
 """Example script that uses wolphin"""
-
-
-from wolphin.project import WolphinProject, print_status
-from wolphin.config import configuration
-from wolphin.generator import wolphin_project
-from fabric.api import run
 
 import argparse
 import sys
 
+from fabric.api import run
 
-conn = None
+from wolphin.project import WolphinProject, print_status
+from wolphin.config import configuration
+from wolphin.generator import wolphin_project
 
 
 def controller():
