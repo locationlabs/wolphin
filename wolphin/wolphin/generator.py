@@ -16,7 +16,7 @@ def wolphin_project(project, instance_numbers=None):
         if instance.state_code == project.STATES['running']:
             running_instances.append("{}@{}".format(project.config['USER'], instance.ip_address))
 
-    if 0 == len(running_instances):
+    if not running_instances:
         raise NoRunningInstances(project.config['PROJECT'])
 
     for host_string in running_instances:

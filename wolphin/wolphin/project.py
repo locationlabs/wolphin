@@ -71,13 +71,13 @@ class WolphinProject(object):
                     others.append(instance)
 
         # now wait for the shutting-down and stopping instances to finish shutting down / stopping.
-        if len(shutting_down) > 0:
+        if shutting_down:
             print "Waiting for some instances to finish shutting-down ...."
             shutting_down = self._wait_for_status(shutting_down,
                                                   state_code=self.STATES['shutting-down'],
                                                   new_state_code=self.STATES['terminated'])
 
-        if len(stopping) > 0:
+        if stopping:
             print "Waiting for some instances to finish stopping ...."
             stopping = self._wait_for_status(stopping,
                                              state_code=self.STATES['stopping'],
@@ -98,9 +98,7 @@ class WolphinProject(object):
         if already_present > int(self.config['MAX_INSTANCE_COUNT']):
             # terminate some extra instances
             shutting_down = []
-            x = 0
-            while x < (already_present - int(self.config['MAX_INSTANCE_COUNT'])):
-                x += 1
+            for _ in range(already_present - int(self.config['MAX_INSTANCE_COUNT'])):
                 instance = healthy.pop()
                 instance.terminate()
                 shutting_down.append(instance)
@@ -172,20 +170,25 @@ class WolphinProject(object):
         for instance in instances:
             if instance.state_code == self.STATES['stopping']:
                 stopping.append(instance)
-        if len(stopping) > 0:
+        if stopping:
             print "Waiting for some instance(s) to finish stopping first ...."
             self._wait_for_status(stopping,
                                   state_code=self.STATES['stopping'],
                                   new_state_code=self.STATES['stopped'])
 
-        # start the instances that are not already running and not pending to start.
+        # start the instances that are not already running and not pending to start,
+        # or not stopped yet.
+        starting = []
         for instance in instances:
             instance.update()
-            if instance.state_code not in [self.STATES['running'], self.STATES['pending']]:
+            if instance.state_code not in [self.STATES['stopping'],
+                                           self.STATES['running'],
+                                           self.STATES['pending']]:
                 instance.start()
+                starting.append(instance)
 
         print "Waiting for instance(s) to start ...."
-        self._wait_for_status(instances,
+        self._wait_for_status(starting,
                               state_code=self.STATES['pending'],
                               new_state_code=self.STATES['running'])
 
@@ -196,11 +199,16 @@ class WolphinProject(object):
 
         instances = self.get_healthy_instances(instance_numbers=instance_numbers)
 
+        # start the instances that are not already stopping or stopped.
+        stopping = []
         for instance in instances:
-            instance.stop()
+            instance.update()
+            if instance.state_code not in [self.STATES['stopping'], self.STATES['stopped']]:
+                instance.stop()
+                stopping.append(instance)
 
         print "Waiting for all instances to stop ...."
-        self._wait_for_status(instances,
+        self._wait_for_status(stopping,
                               state_code=self.STATES['stopping'],
                               new_state_code=self.STATES['stopped'])
 
@@ -345,8 +353,7 @@ class WolphinProject(object):
     def _get_instance_suffix(self, instance):
         """Returns the instance suffix for the ``instance``"""
 
-        splits = str((instance).tags.get("Name")).split(".")
-        return splits[len(splits) - 1]
+        return  str((instance).tags.get("Name")).split(".")[-1]
 
     def _get_instance_number(self, instance):
         """Parses the instance name to get the instance number"""
@@ -431,42 +438,40 @@ class WolphinProject(object):
 
         max_tries = int(self.config['MAX_WAIT_TRIES'])
         refresh_rate = int(self.config['MAX_WAIT_DURATION'])
-        check_count = 0
-        keep_waiting = True
 
-        while max_tries > 0 and keep_waiting and instances is not None and len(instances) > 0:
-            instance_count = len(instances)
-            check_count += 1
-            print "Waiting for {} instances to go from {} to {} (refreshed every {} secs., "\
-                  "max {} secs.)".format(instance_count,
-                                         _inverse_lookup(self.STATES, state_code),
-                                         _inverse_lookup(self.STATES, new_state_code),
-                                         refresh_rate,
-                                         max_tries * refresh_rate)
+        if instances:
+            for _ in range(max_tries):
+                instance_count = len(instances)
+                print "Waiting for {} instances to go from {} to {} (refreshed every {} secs., "\
+                      "max {} secs.)".format(instance_count,
+                                             _inverse_lookup(self.STATES, state_code),
+                                             _inverse_lookup(self.STATES, new_state_code),
+                                             refresh_rate,
+                                             max_tries * refresh_rate)
 
-            keep_waiting = False
-            instances_ok = 0
-            for instance in instances:
-                instance.update()
-                print "{}|{}\t|{}\t|{}".format(instance.id,
-                                               instance.tags.get("Name"),
-                                               instance.state_code,
-                                               instance.state)
-                code = instance.state_code
-                ok_flag = True
-                if state_code is not None and code == state_code:
-                    keep_waiting = True
-                    ok_flag = False
-                if new_state_code is not None and code != new_state_code:
-                    keep_waiting = True
-                    ok_flag = False
-                if ok_flag:
-                    instances_ok += 1
+                keep_waiting = False
+                instances_ok = 0
+                for instance in instances:
+                    instance.update()
+                    print "{}|{}\t|{}\t|{}".format(instance.id,
+                                                   instance.tags.get("Name"),
+                                                   instance.state_code,
+                                                   instance.state)
+                    code = instance.state_code
+                    ok_flag = True
+                    if state_code is not None and code == state_code:
+                        keep_waiting = True
+                        ok_flag = False
+                    if new_state_code is not None and code != new_state_code:
+                        keep_waiting = True
+                        ok_flag = False
+                    if ok_flag:
+                        instances_ok += 1
 
-            if keep_waiting:
-                if check_count == max_tries:
-                    print "!! Max amount of wait reached, will not wait anymore, continuing ...."
+                if not keep_waiting:
                     break
+                if _ == max_tries - 1:
+                    print "!! Max amount of wait reached, will not wait anymore, continuing ...."
                 else:
                     sleep(refresh_rate)
 

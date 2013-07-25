@@ -27,8 +27,7 @@ def controller():
     parser = argparse.ArgumentParser(description='Wolphin uses its cousin Boto, to manage the '
                                                  'Amazon ec2 instances for your projects.')
 
-    parser.add_argument("command",
-                        help=", ".join(commands))
+    parser.add_argument("command", choices=commands)
 
     parser.add_argument("-p", "--project",
                         dest="project",
