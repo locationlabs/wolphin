@@ -126,6 +126,7 @@ class Instance(object):
         self.launch_time = str(datetime.datetime.now())
         self.custom_instance_update_seq = []
         self.custom_instance_update_seq_loc = 0
+        self.update_disabled = False
 
     def start(self):
         if self.state_code != STATES['terminated'] and self.state_code != STATES['running']:
@@ -144,7 +145,8 @@ class Instance(object):
 
     def update(self):
         'Mock changing over from a transitioning to a stable state'
-
+        if self.update_disabled:
+            return
         if self.custom_instance_update_seq:
             # cycle through the custom update sequence every time update is called,
             # if custom update sequence exists.

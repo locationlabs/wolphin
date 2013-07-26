@@ -26,34 +26,10 @@ class TestConfiguration(object):
             eq_(validity, is_valid)
 
     def test_config(self):
-        """Tests for validation of valid and invalid configs"""
+        """Tests for validation of a valid config"""
 
         config = Configuration()
         config.email = "a@a.com"
-
-        def _generate_none_value_configs(test_cases, config):
-            """Generate config objects making each attribute's value as None"""
-
-            for k, v in config.__dict__.iteritems():
-                if v:
-                    new_config = copy.deepcopy(config)
-                    new_config.__dict__[k] = None
-                    test_cases.append(new_config)
-
-        def _generate_invalid_configs_with_malformed_values(test_cases, attribute_arrays):
-            """Generates config objects with malformed attribute values"""
-
-            for array in attribute_arrays:
-                for k, v in array:
-                    new_config = copy.deepcopy(config)
-                    new_config.__dict__[k] = v
-                    test_cases.append(new_config)
-
-        # used to accumulate invalid configs.
-        test_cases = []
-
-        # accumulate configs with some attributes having None values.
-        _generate_none_value_configs(test_cases, config)
 
         # valid config.
         for k in config.__dict__.keys():
@@ -62,18 +38,34 @@ class TestConfiguration(object):
         # test for a valid config.
         yield self._assert_validation, config, True
 
-        malformed_value_array = [[('min_instance_count', 0)],
-                                 [('min_instance_count', 0), ('max_instance_count', 0)],
-                                 [('min_instance_count', 1), ('max_instance_count', 0)],
-                                 [('email', 'a')]]
+    def test_config_with_malformed_values(self):
 
-        # accumulate configs with malformed attribute values.
-        _generate_invalid_configs_with_malformed_values(test_cases, malformed_value_array)
+        for array in [[('min_instance_count', 0)],
+                     [('min_instance_count', 0), ('max_instance_count', 0)],
+                     [('min_instance_count', 1), ('max_instance_count', 0)],
+                     [('email', 'a')]]:
+            for k, v in array:
+                new_config = copy.deepcopy(Configuration())
+                new_config.__dict__[k] = v
+            yield self._assert_validation, new_config, False
+            yield self._assert_wolphin_error_raised, new_config, InvalidWolphinConfiguration
 
-        # test for invalid configs.
-        for case in test_cases:
-            yield self._assert_validation, case, False
-            yield self._assert_wolphin_error_raised, case, InvalidWolphinConfiguration
+    def test_config_with_none_values(self):
+
+        def _generate_none_value_configs(config):
+            """Generate config objects making each attribute's value as None"""
+
+            configs = [config]
+            for k, v in config.__dict__.iteritems():
+                if v:
+                    new_config = copy.deepcopy(config)
+                    new_config.__dict__[k] = None
+                    configs.append(new_config)
+            return configs
+
+        for config in _generate_none_value_configs(Configuration()):
+            yield self._assert_validation, config, False
+            yield self._assert_wolphin_error_raised, config, InvalidWolphinConfiguration
 
     def test_parser(self):
         lines = [

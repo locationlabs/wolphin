@@ -12,7 +12,7 @@ class TestWolphin(object):
     def setUp(self):
 
         config = Configuration(project="test_project")
-        config.validate = Mock(return_value=(True, ""))
+        config.validate = Mock(return_value=(True, None))
         with patch('wolphin.project.connect_to_region', Mock(return_value=MockEC2Connection())):
             self.project = WolphinProject(config)
 
@@ -33,7 +33,7 @@ class TestWolphin(object):
         pending = []
         running = []
 
-        for x in range(0, 2):
+        for x in range(2):
             self.project.conn.INSTANCES[instance_ids[x]].state = 'stopping'
             stopping.append(instance_ids[x])
         for x in range(2, 4):
@@ -282,7 +282,7 @@ class TestWolphin(object):
             result = self.project.get_healthy_instances()
             ok_(0 < len(result))
             for instance in result:
-                ok_(instance.state not in ['terminated', 'shutting_down'])
+                ok_(instance.state not in ['terminated', 'shutting-down'])
 
     def test_get_healthy_selective_instances(self):
         stopping, stopped, shutting_down, terminated, pending, running = self._multi_state_setup()
@@ -295,7 +295,7 @@ class TestWolphin(object):
                                                         running[0]]))
         ok_(0 < len(result))
         for instance in result:
-            ok_(instance.state not in ['terminated', 'shutting_down'])
+            ok_(instance.state not in ['terminated', 'shutting-down'])
 
     def test_get_all_project_instances(self):
         result = self.project.get_all_project_instances()
@@ -316,6 +316,37 @@ class TestWolphin(object):
         eq_(len(instance_ids), len(result))
         for instance in result:
             ok_(instance.id in instance_ids)
+
+    def _assert_state_based_instance_selection(self, state_code):
+        """Assert that state based instance selection works fine"""
+        stopping, stopped, shutting_down, terminated, pending, running = self._multi_state_setup()
+        for instance_id in (set(stopping) | set(stopped) | set(shutting_down) | set(terminated)
+                            | set(pending) | set(running)):
+            self.project.conn.INSTANCES[instance_id].update_disabled = True
+
+        targets = {
+            10000: [],  # invalid state_code case
+            STATES['running']: running,
+            STATES['pending']: pending,
+            STATES['stopping']: stopping,
+            STATES['stopped']: stopped,
+            STATES['shutting-down']: shutting_down,
+            STATES['terminated']: terminated
+        }
+        got_instances = self.project.get_instances_in_state(state_code)
+        eq_(len(targets[state_code]), len(got_instances))
+        for i in got_instances:
+            ok_(i.id in targets[state_code])
+
+    def test_get_instances_in_state(self):
+        for state_code in [10000,  # invalid state_code case
+                           STATES['running'],
+                           STATES['pending'],
+                           STATES['stopping'],
+                           STATES['stopped'],
+                           STATES['shutting-down'],
+                           STATES['terminated']]:
+            yield self._assert_state_based_instance_selection, state_code
 
     def _get_instance_numbers(self, instance_ids):
         instance_numbers = []

@@ -108,7 +108,7 @@ class Configuration(object):
         if not exists(self.ssh_key_file):
             return False, ".pem file {} could not be found".format(self.ssh_key_file)
 
-        return True, "valid"
+        return True, None
 
 
 def parse_property_file(config, property_file):

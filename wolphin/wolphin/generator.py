@@ -5,16 +5,13 @@ from wolphin.exceptions import NoRunningInstances
 
 def wolphin_project(project, instance_numbers=None):
 
-    instances = project.get_healthy_instances(instance_numbers)
-    for instance in instances:
-        instance.update()
-    running_instances = [i.ip_address for i in instances if i.state == 'running']
-
-    if not running_instances:
+    running_hosts = project.get_instances_in_state(project.STATES['running'],
+                                                   instance_numbers=instance_numbers)
+    if not running_hosts:
         raise NoRunningInstances("project: {}".format(project.config.project))
 
-    for host_string in running_instances:
-        with settings(host_string=host_string,
+    for host in [host.ip_address for host in running_hosts]:
+        with settings(host_string=host,
                       user=project.config.user,
                       key_filename=project.config.ssh_key_file):
             yield

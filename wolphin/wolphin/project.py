@@ -158,7 +158,7 @@ class WolphinProject(object):
 
         instances = self.get_healthy_instances(instance_numbers=instance_numbers)
 
-        # wait for the stopping instances to finish stopping as they cannot be started
+        # wait for the stopping instances to finish stopping as they cannot be started if
         # they are in the middle of stopping.
         stopping = []
         for instance in instances:
@@ -193,11 +193,25 @@ class WolphinProject(object):
 
         instances = self.get_healthy_instances(instance_numbers=instance_numbers)
 
-        # start the instances that are not already stopping or stopped.
+        # wait for the starting instances to finish starting as they cannot be stopped if
+        # they are in the middle of starting.
+        starting = []
+        for instance in instances:
+            if instance.state_code == self.STATES['pending']:
+                starting.append(instance)
+        if starting:
+            print "Waiting for some instance(s) to finish starting first ...."
+            self._wait_for_status(starting,
+                                  state_code=self.STATES['pending'],
+                                  new_state_code=self.STATES['running'])
+
+        # start the instances that are not already stopping or stopped or pending.
         stopping = []
         for instance in instances:
             instance.update()
-            if instance.state_code not in [self.STATES['stopping'], self.STATES['stopped']]:
+            if instance.state_code not in [self.STATES['pending'],
+                                           self.STATES['stopping'],
+                                           self.STATES['stopped']]:
                 instance.stop()
                 stopping.append(instance)
 
@@ -319,11 +333,15 @@ class WolphinProject(object):
         Returns instances that are not terminated and not going towards termination (shutting-down).
         """
 
-        healthy = []
-        for instance in self._select_instances(instance_numbers=instance_numbers):
-            if instance.state_code not in [self.STATES['terminated'], self.STATES['shutting-down']]:
-                healthy.append(instance)
-        return healthy
+        return [i for i in self._select_instances(instance_numbers=instance_numbers)
+                if i.state_code not in [self.STATES['terminated'], self.STATES['shutting-down']]]
+
+    def get_instances_in_state(self, state_code, instance_numbers=None):
+        """Returns project instances that are in the given ``state_code``"""
+        if state_code not in self.STATES.itervalues():
+            return []
+        return [i for i in self._select_instances(instance_numbers=instance_numbers)
+                if i.state_code == state_code]
 
     def get_instances(self, instance_name_suffix):
         """Gets the ec2 instance(s) by its wolphin project instance name"""
@@ -403,7 +421,7 @@ class WolphinProject(object):
         if instance_numbers:
             for instance_number in instance_numbers:
                 got_instances = self.get_instances(instance_number)
-                if got_instances is not None:
+                if got_instances:
                     for instance in got_instances:
                         instances.append(instance)
         else:
@@ -452,7 +470,7 @@ class WolphinProject(object):
                 if ((state_code is not None and instance.state_code == state_code) or
                         (new_state_code is not None and instance.state_code != new_state_code)):
                     keep_waiting = True
-
+            print color_table
             if not keep_waiting:
                 break
             if attempt == max_tries - 1:
