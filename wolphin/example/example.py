@@ -7,8 +7,9 @@ import sys
 from fabric.api import run
 
 from wolphin.project import WolphinProject, print_status
-from wolphin.config import configuration
+from wolphin.config import Configuration
 from wolphin.generator import wolphin_project
+from wolphin.exceptions import WolphinException
 
 
 def controller():
@@ -68,35 +69,40 @@ def controller():
     if args.auth_credentials_file is None:
         parser.error("credentials required.")
 
-    project = WolphinProject(configuration(auth_credentials_file=args.auth_credentials_file,
-                                           project=args.project,
-                                           email=args.email,
-                                           user_config_file=args.user_ec2_args_file))
+    config = Configuration.create(args.auth_credentials_file,
+                                  args.user_ec2_args_file)
+    config.email = args.email or config.email
+    config.project = args.project or config.project
 
-    if args.command == "status":
-        status_info = project.status(instance_numbers=args.project_instances)
-    elif args.command == "create":
-        status_info = project.create()
-    elif args.command == "info":
-        for _ in wolphin_project(project, instance_numbers=args.project_instances):
-            run("uname -a; users; cat ~/.ssh/authorized_keys; ifconfig -a; pwd; ls -al")
-    elif args.command == "start":
-        status_info = project.start(instance_numbers=args.project_instances)
-    elif args.command == "stop":
-        status_info = project.stop(instance_numbers=args.project_instances)
-    elif args.command == "reboot":
-        status_info = project.reboot(instance_numbers=args.project_instances)
-    elif args.command == "terminate":
-        status_info = project.terminate(instance_numbers=args.project_instances)
-    elif args.command == "revert":
-        status_info = project.revert(instance_numbers=args.project_instances,
-                                     sequential=args.sequential)
-    else:
-        parser.error("Unknown wolphin command: {}".format(args.command))
+    project = WolphinProject(config)
+    try:
+        if args.command == "status":
+            status_info = project.status(instance_numbers=args.project_instances)
+        elif args.command == "create":
+            status_info = project.create()
+        elif args.command == "info":
+            for _ in wolphin_project(project, instance_numbers=args.project_instances):
+                run("uname -a; users; cat ~/.ssh/authorized_keys; ifconfig -a; pwd; ls -al")
+        elif args.command == "start":
+            status_info = project.start(instance_numbers=args.project_instances)
+        elif args.command == "stop":
+            status_info = project.stop(instance_numbers=args.project_instances)
+        elif args.command == "reboot":
+            status_info = project.reboot(instance_numbers=args.project_instances)
+        elif args.command == "terminate":
+            status_info = project.terminate(instance_numbers=args.project_instances)
+        elif args.command == "revert":
+            status_info = project.revert(instance_numbers=args.project_instances,
+                                         sequential=args.sequential)
+        else:
+            parser.error("Unknown wolphin command: {}".format(args.command))
 
-    if args.command != "info":
-        print_status(status_info)
+        if args.command != "info":
+            print_status(status_info)
 
+    except WolphinException as ex:
+        print ex
+        sys.exit(1)
     sys.exit(0)
 
 if __name__ == '__main__':

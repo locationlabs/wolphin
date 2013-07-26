@@ -1,5 +1,4 @@
-from wolphin.attr_dict import AttrDict
-from wolphin.config import validate
+from wolphin.attribute_dict import AttributeDict
 from wolphin.exceptions import (InvalidWolphinConfiguration,
                                 EC2InstanceLimitExceeded,
                                 WolphinException)
@@ -13,7 +12,7 @@ from time import sleep
 
 class WolphinProject(object):
 
-    def __init__(self, config, config_validator=None, connection=None):
+    def __init__(self, config, connection=None):
 
         self.STATES = {
             'pending': 0,
@@ -24,18 +23,23 @@ class WolphinProject(object):
             'terminated': 48
         }
 
-        validator = config_validator or validate
-        valid, err_msg = validator(config)
+        valid, err_msg = config.validate()
 
         if not valid:
             raise InvalidWolphinConfiguration(err_msg)
 
         self.config = config
+        self.conn = connection
+        self._connect()
 
-        self.conn = connection or \
-            connect_to_region(self.config['REGION'],
-                              aws_access_key_id=self.config['AWS_ACCESS_KEY_ID'],
-                              aws_secret_access_key=self.config['AWS_SECRET_KEY'])
+    def _connect(self):
+
+        self.conn = (
+            self.conn or
+            connect_to_region(self.config.region,
+                              aws_access_key_id=self.config.aws_access_key_id,
+                              aws_secret_access_key=self.config.aws_secret_key)
+        )
 
     def create(self):
         """
@@ -43,12 +47,6 @@ class WolphinProject(object):
         """
 
         print "Finding any existing reusable hosts .... "
-        # first checking if any instances are already allocated for this project > build a reusable
-        # host list.
-        # 1. remove the ones that have terminated.
-        # 2. wait for the ones shutting down till they shut down and see if they terminated > if so
-        #    remove them
-        # the ones that are left are the healthy ones that can be re used.
 
         shutting_down = []
         stopping = []
@@ -86,8 +84,12 @@ class WolphinProject(object):
         # see which instances are terminated or shutting-down, remove them and reuse the rest.
         healthy = []
         for instance in set(stopping) | set(others):
-            # checking again to be absolutely sure as wait timeout may have happened and there might
-            # be some instances that are in the process of termination, in the list(s).
+            # Check again to be absolutely sure as wait timeout might have happened and there might
+            # be some instances in the list that are in the process of termination.
+            # This is because sometimes, some instances fail to start, i.e. go from pending to
+            # terminated. This can be caused due to some problem at amazon infrastructure end so we
+            # need to make sure that we avoid such issues as much as we can. Trying to
+            # start or reboot shutting-down or terminated instances raises an exception.
             if instance.state_code not in [self.STATES['shutting-down'], self.STATES['terminated']]:
                 healthy.append(instance)
 
@@ -95,10 +97,10 @@ class WolphinProject(object):
         already_present = len(healthy)
         needed_min = needed_max = 0
 
-        if already_present > int(self.config['MAX_INSTANCE_COUNT']):
+        if already_present > int(self.config.max_instance_count):
             # terminate some extra instances
             shutting_down = []
-            for _ in range(already_present - int(self.config['MAX_INSTANCE_COUNT'])):
+            for _ in range(already_present - int(self.config.max_instance_count)):
                 instance = healthy.pop()
                 instance.terminate()
                 shutting_down.append(instance)
@@ -108,12 +110,12 @@ class WolphinProject(object):
                                                   state_code=self.STATES['shutting-down'],
                                                   new_state_code=self.STATES['terminated'])
 
-        elif already_present < int(self.config['MIN_INSTANCE_COUNT']):
-            needed_min = int(self.config['MIN_INSTANCE_COUNT']) - already_present
-            needed_max = int(self.config['MAX_INSTANCE_COUNT']) - already_present
-        elif int(self.config['MIN_INSTANCE_COUNT']) <= already_present and \
-                already_present <= int(self.config['MAX_INSTANCE_COUNT']):
-            needed_max = int(self.config['MAX_INSTANCE_COUNT']) - already_present
+        elif already_present < int(self.config.min_instance_count):
+            needed_min = int(self.config.min_instance_count) - already_present
+            needed_max = int(self.config.max_instance_count) - already_present
+        elif (int(self.config.min_instance_count) <= already_present and
+              already_present <= int(self.config.max_instance_count)):
+            needed_max = int(self.config.max_instance_count) - already_present
 
         print "More needed from Amazon: min=", needed_min, "max=", needed_max
 
@@ -129,15 +131,15 @@ class WolphinProject(object):
         if needed_max > 0:
             # boto required minimum number of instances requested to be 1
             needed_min = 1 if needed_min < 1 else needed_min
-            print "Requesting between {} and {} EC2 instances" \
-                  " for project: {} ....".format(needed_min, needed_max, self.config['PROJECT'])
+            print ("Requesting between {} and {} EC2 instances"
+                   " for project: {} ....".format(needed_min, needed_max, self.config.project))
 
             reservation = self._reserve(needed_min, needed_max)
             print reservation
             provided = len(reservation.instances)
             total_instances += provided
-            print "{} instances provided by Amazon, total in use: " \
-                  "{}".format(provided, total_instances)
+            print ("{} instances provided by Amazon, total in use: "
+                   "{}".format(provided, total_instances))
 
             #  Tagging instances with the project name.
             counter = max_instance_number
@@ -154,8 +156,8 @@ class WolphinProject(object):
         for instance in self.get_all_project_instances():
             running_instances += 1 if instance.state_code == self.STATES['running'] else 0
 
-        print "{} ec2 instances ready for project "\
-              "{}".format(running_instances, self.config['PROJECT'])
+        print ("{} ec2 instances ready for project "
+               "{}".format(running_instances, self.config.project))
 
         return self.status()
 
@@ -286,22 +288,22 @@ class WolphinProject(object):
         if instances is not None:
             for instance in instances:
                 instance.update()
-                status_info.append(AttrDict(id=instance.id,
-                                            project_name=instance.tags.get("ProjectName"),
-                                            name=instance.tags.get("Name"),
-                                            state_code=instance.state_code,
-                                            state=instance.state,
-                                            public_dns_name=instance.public_dns_name,
-                                            public_ip_address=instance.ip_address,
-                                            private_dns_name=instance.private_dns_name,
-                                            private_ip_address=instance.private_ip_address,
-                                            ami_id=instance.image_id,
-                                            instance_type=instance.instance_type,
-                                            placement=instance.placement,  # availability zone
-                                            ssh_key_name=instance.key_name,
-                                            security_groups=instance.groups,
-                                            launch_time=instance.launch_time,
-                                            owner_email=instance.tags.get("OwnerEmail")))
+                status_info.append(AttributeDict(id=instance.id,
+                                                 project_name=instance.tags.get("ProjectName"),
+                                                 name=instance.tags.get("Name"),
+                                                 state_code=instance.state_code,
+                                                 state=instance.state,
+                                                 public_dns_name=instance.public_dns_name,
+                                                 public_ip_address=instance.ip_address,
+                                                 private_dns_name=instance.private_dns_name,
+                                                 private_ip_address=instance.private_ip_address,
+                                                 ami_id=instance.image_id,
+                                                 instance_type=instance.instance_type,
+                                                 placement=instance.placement,  # availability zone
+                                                 ssh_key_name=instance.key_name,
+                                                 security_groups=instance.groups,
+                                                 launch_time=instance.launch_time,
+                                                 owner_email=instance.tags.get("OwnerEmail")))
         return status_info
 
     def terminate(self, instance_numbers=None):
@@ -336,7 +338,7 @@ class WolphinProject(object):
 
         reservations = self.conn.get_all_instances(filters={"tag:Name":
                                                             "wolphin."
-                                                            "{}.{}".format(self.config['PROJECT'],
+                                                            "{}.{}".format(self.config.project,
                                                                            instance_name_suffix)})
 
         return self._get_instances_from_reservations(reservations)
@@ -346,14 +348,14 @@ class WolphinProject(object):
 
         reservations = self.conn.get_all_instances(filters={"tag:ProjectName":
                                                             "wolphin."
-                                                            "{}".format(self.config['PROJECT'])})
+                                                            "{}".format(self.config.project)})
 
         return self._get_instances_from_reservations(reservations)
 
     def _get_instance_suffix(self, instance):
         """Returns the instance suffix for the ``instance``"""
 
-        return  str((instance).tags.get("Name")).split(".")[-1]
+        return str((instance).tags.get("Name")).split(".")[-1]
 
     def _get_instance_number(self, instance):
         """Parses the instance name to get the instance number"""
@@ -377,26 +379,24 @@ class WolphinProject(object):
         starts the instances and returns the reservation.
         """
 
-        if needed_min is None:
-            needed_min = self.config['MIN_INSTANCE_COUNT']
-        if needed_max is None:
-            needed_max = self.config['MAX_INSTANCE_COUNT']
+        needed_min = needed_min or self.config.min_instance_count
+        needed_max = needed_max or self.config.max_instance_count
 
         # reserve and run instances.
         try:
-            reservation = self.conn.run_instances(self.config['AMI_ID'],
+            reservation = self.conn.run_instances(self.config.ami_id,
                                                   min_count=str(needed_min),
                                                   max_count=str(needed_max),
-                                                  key_name=self.config['AMAZON_KEYPAIR_NAME'],
+                                                  key_name=self.config.amazon_keypair_name,
                                                   security_groups=
-                                                  [self.config['INSTANCE_SECURITYGROUP']],
-                                                  instance_type=self.config['INSTANCE_TYPE'],
+                                                  [self.config.instance_securitygroup],
+                                                  instance_type=self.config.instance_type,
                                                   placement=
-                                                  self.config['INSTANCE_AVAILABILITYZONE'])
+                                                  self.config.instance_availabilityzone)
         except EC2ResponseError as ec2_error:
             if "InstanceLimitExceeded" in str(ec2_error):
                 raise EC2InstanceLimitExceeded("region={}; Amazon EC2 Response:"
-                                               "\n{}".format(self.config['REGION'],
+                                               "\n{}".format(self.config.region,
                                                              ec2_error))
             else:
                 raise WolphinException(str(ec2_error))
@@ -426,9 +426,9 @@ class WolphinProject(object):
         """
 
         self.conn.create_tags(instance.id,
-                              {"Name": "wolphin.{}.{}".format(self.config['PROJECT'], suffix),
-                              "ProjectName": "wolphin.{}".format(self.config['PROJECT']),
-                              "OwnerEmail": self.config['EMAIL']})
+                              {"Name": "wolphin.{}.{}".format(self.config.project, suffix),
+                              "ProjectName": "wolphin.{}".format(self.config.project),
+                              "OwnerEmail": self.config.email})
 
     def _wait_for_status(self, instances, state_code=None, new_state_code=None):
         """
@@ -436,44 +436,37 @@ class WolphinProject(object):
         if ``new_code is set, then waits till all the ``instances`` get to the ``new_state_code``.
         """
 
-        max_tries = int(self.config['MAX_WAIT_TRIES'])
-        refresh_rate = int(self.config['MAX_WAIT_DURATION'])
+        max_tries = int(self.config.max_wait_tries)
+        refresh_rate = int(self.config.max_wait_duration)
 
-        if instances:
-            for _ in range(max_tries):
-                instance_count = len(instances)
-                print "Waiting for {} instances to go from {} to {} (refreshed every {} secs., "\
-                      "max {} secs.)".format(instance_count,
-                                             _inverse_lookup(self.STATES, state_code),
-                                             _inverse_lookup(self.STATES, new_state_code),
-                                             refresh_rate,
-                                             max_tries * refresh_rate)
+        if not instances:
+            return
+        for attempt in range(max_tries):
+            instance_count = len(instances)
+            print ("Waiting for {} instances to go from {} to {} (refreshed every {} secs., "
+                   "max {} secs.)".format(instance_count,
+                                          _inverse_lookup(self.STATES, state_code),
+                                          _inverse_lookup(self.STATES, new_state_code),
+                                          refresh_rate,
+                                          max_tries * refresh_rate))
 
-                keep_waiting = False
-                instances_ok = 0
-                for instance in instances:
-                    instance.update()
-                    print "{}|{}\t|{}\t|{}".format(instance.id,
-                                                   instance.tags.get("Name"),
-                                                   instance.state_code,
-                                                   instance.state)
-                    code = instance.state_code
-                    ok_flag = True
-                    if state_code is not None and code == state_code:
-                        keep_waiting = True
-                        ok_flag = False
-                    if new_state_code is not None and code != new_state_code:
-                        keep_waiting = True
-                        ok_flag = False
-                    if ok_flag:
-                        instances_ok += 1
+            keep_waiting = False
+            color_table = ColorTable('instance', 'state')
+            for instance in instances:
+                instance.update()
+                color_table.add(instance="{}|{}".format(instance.id, instance.tags.get("Name")),
+                                state="{}|{}".format(instance.state_code, instance.state))
 
-                if not keep_waiting:
-                    break
-                if _ == max_tries - 1:
-                    print "!! Max amount of wait reached, will not wait anymore, continuing ...."
-                else:
-                    sleep(refresh_rate)
+                if ((state_code is not None and instance.state_code == state_code) or
+                        (new_state_code is not None and instance.state_code != new_state_code)):
+                    keep_waiting = True
+
+            if not keep_waiting:
+                break
+            if attempt == max_tries - 1:
+                print "!! Max amount of wait reached, will not wait anymore, continuing ...."
+            else:
+                sleep(refresh_rate)
 
         return instances
 
@@ -503,8 +496,4 @@ def print_status(instance_infos):
 
 def _inverse_lookup(dictionary, value):
     """Does an inverse lookup of key from value"""
-    keys = []
-    for k, v in dictionary.iteritems():
-        if v == value:
-            keys.append(k)
-    return keys
+    return [key for key in dictionary if dictionary[key] == value]

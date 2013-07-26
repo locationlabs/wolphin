@@ -1,106 +1,135 @@
-from wolphin import defaults
-
-from os.path import expanduser, abspath, exists, join
 import re
+from os.path import expanduser, abspath, exists, join
 
 
-def configuration(auth_credentials_file=None,
-                  project=None,
-                  email=None,
-                  user_config_file=None):
+class Configuration(object):
+    """Configuration for any Wolphin project"""
+
+    def __init__(self,
+                 project=None,
+                 email=None,
+                 region='us-west-1',
+                 ami_id='ami-87712ac2',
+                 instance_type='t1.micro',
+                 user='ubuntu',
+                 instance_availabilityzone='us-west-1b',
+                 instance_securitygroup='default',
+                 min_instance_count=1,
+                 max_instance_count=1,
+                 amazon_keypair_name=None,
+                 pem_file=None,
+                 pem_path=None,
+                 aws_access_key_id=None,
+                 aws_secret_key=None,
+                 max_wait_tries=12,
+                 max_wait_duration=5):
+        """
+        Initialize a wolphin configuration from defaults and any provided parameters.
+
+        :param project:             wolphin project name.
+        :param email:               email address of the project owner.
+        :param region:              region to spawn the ec2 instances in.
+        :param ami_id:              a suitable AMI Id (Amazon Machine Instance Id) of the base image
+                                    to be used. Don't forget to find the right ID for your region.
+        :param instance_type:       ec2 isntance type, should match the AMI.
+        :param user:                a valid account username which can access the ec2 instances,
+                                    should match the AMI.
+        :param instance_availabilityzone:   the zone to make the ec2 instances available in.
+        :param instance_securitygroup:      the security group for the ec2 instances, this should be
+                                            the name of *your* security group in *your* Amazon
+                                            account.
+        :param min_instance_count:  minimum number of ec2 instances to request.
+        :param max_instance_count:  maximum number of ec2 instances to request.
+        :param amazon_keypair_name: the key pair name in use for ec2 instances.
+        :param pem_file:            name of the .pem file.
+        :param pem_path:            path to the .pem file.
+        :param aws_access_key_id:   amazon web services access key id.
+        :param aws_secret_key:      amazon web services secret key.
+        :param max_wait_tries:      maximum number of retries to make.
+        :param max_wait_duration:   maximum duration in seconds, to wait during instance
+                                    state transition, for each try.
+        """
+
+        self.project = project
+        self.email = email
+        self.region = region
+        self.ami_id = ami_id
+        self.instance_type = instance_type
+        self.user = user
+        self.instance_availabilityzone = instance_availabilityzone
+        self.instance_securitygroup = instance_securitygroup
+        self.min_instance_count = min_instance_count
+        self.max_instance_count = max_instance_count
+        self.amazon_keypair_name = amazon_keypair_name
+        self.pem_file = pem_file
+        self.pem_path = pem_path
+        self.aws_access_key_id = aws_access_key_id
+        self.aws_secret_key = aws_secret_key
+        self.max_wait_tries = max_wait_tries
+        self.max_wait_duration = max_wait_duration
+
+    @classmethod
+    def create(cls, *config_files):
+        """
+        Factory Method to create a config from ``config_files``.
+
+        :param config_files: files containing overrides for config.
+        """
+
+        config = cls()
+        for config_file in config_files:
+            parse_property_file(config, config_file)
+
+        return config
+
+    @property
+    def ssh_key_file(self):
+        """returns the absolute location (with the filename) of the configured .pem file."""
+        return abspath(expanduser(join(self.pem_path, self.pem_file)))
+
+    def validate(self):
+        """Validates this configuration object"""
+
+        config = self.__dict__
+
+        for k in config.keys():
+            if not config[k]:
+                return False, "{} is missing or None.".format(k)
+
+        # some basic email validation.
+        if not re.compile(".+@.+[.].+").match(self.email):
+            return False, "email: '{}' is not valid".format(self.email)
+
+        # min and max instance count validation.
+        if not 0 < int(self.min_instance_count) <= int(self.max_instance_count):
+            return False, ("min_instance_count and max_instance_count should be such that "
+                           " 0 < min_instance_count <= max_instance_count")
+
+        if not exists(self.ssh_key_file):
+            return False, ".pem file {} could not be found".format(self.ssh_key_file)
+
+        return True, "valid"
+
+
+def parse_property_file(config, property_file):
     """
-    Create a config dict from the defaults, auth_credentials_file as well as user_config_file
-    """
+    Reads the ``property_file`` to extract properties and updates the ``config`` with them.
 
-    config = dict()
-
-    # Loading defaults into config.
-    config.update(defaults.__dict__)
-
-    # Reading the access key file.
-    if auth_credentials_file is not None:
-        _parse_property_file(config, auth_credentials_file)
-
-    # Overriding / adding any ec2 properties from the provided config file.
-    if user_config_file is not None:
-        _parse_property_file(config, user_config_file)
-
-    # Overriding the EMAIL property.
-    if email is not None:
-        config['EMAIL'] = email
-
-    # Overriding the project name.
-    if project is not None:
-        config['PROJECT'] = project
-
-    return config
-
-
-def _parse_property_file(dictionary, property_file):
-    """
-    Reads the ``property_file`` to extract properties and save them in the ``dictionary``.
     The format of properties should be:
-        K = V or K = "V" or K = 'V'
-    The dictionary would eventually contain:
-        K = V for all the properties defined in the ``property_file``
-    all comments (anything after a '#') are ignored from the ``property_file``.
+        k = v or k = "v" or k = 'v'
 
+    All comments (anything after a '#') are ignored from the ``property_file``. Moreover, all
+    comments should be on a separate line and not as a continuation of the property, e.g.:
+        k = v # comment  - id not considered valid.
+
+    :param config: the config object to be updated with the values from the property_file.
+    :param property_file: the file containing the properties to overrife the ``config`` with.
     """
 
-    for line in property_file:
-        property_pair = line.split("#", 1)[0].strip().split("=", 1)
-        if len(property_pair) > 1:
-            k = property_pair[0].strip()
-            v = property_pair[1].strip()
-            if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
-                # removing enclosing quotes.
-                v = v[1:-1]
-            dictionary[k] = v
+    _unquote = lambda word: (word[1:-1] if ((word.startswith('"') and word.endswith('"')) or
+                             (word.startswith("'") and word.endswith("'"))) else word)
 
-
-def validate(config, attributes=None):
-    """Validates config"""
-
-    if attributes is None:
-        attributes_to_check = {
-            'PROJECT': 'wolphin project name',
-            'EMAIL': 'email of the project owner',
-            'REGION': 'region to spawn the ec2 instances in',
-            'AMI_ID': 'Amazon Machine Instance Id - the base machine image to be used',
-            'INSTANCE_TYPE': 'ec2 isntance type',
-            'USER': 'a valid account username which can access the ec2 instances (AMI)',
-            'INSTANCE_AVAILABILITYZONE': 'the zone to make the ec2 instances available in',
-            'INSTANCE_SECURITYGROUP': 'the security group for the ec2 instances',
-            'MIN_INSTANCE_COUNT': 'minimum number of ec2 instances to request',
-            'MAX_INSTANCE_COUNT': 'maximum number of ec2 instances to request',
-            'AMAZON_KEYPAIR_NAME': 'the key pair name in use for ec2 instances',
-            'PEM_FILE': 'name of the .pem file',
-            'PEM_PATH': 'path to the pem file',
-            'AWS_ACCESS_KEY_ID': 'Amazon Web Services access key id',
-            'AWS_SECRET_KEY': 'Amazon Web Services secret key',
-            'MAX_WAIT_TRIES': 'Maximum number of retries to make',
-            'MAX_WAIT_DURATION': 'Maximum duration in seconds, \
-                                  to wait during instance state transition, for each try.'
-        }
-    else:
-        attributes_to_check = attributes
-
-    for k, v in attributes_to_check.iteritems():
-        if k not in config or config[k] is None or 0 == len(str(config[k])):
-            return False, "{}({}) is missing or None.".format(k, v)
-
-    if 'EMAIL' in attributes_to_check:
-        if not re.compile("[^@]+@[^@]+\.[^@]+").match(config['EMAIL']):
-            return False, "EMAIL: '{}' is not valid".format(config['EMAIL'])
-
-    if 'MIN_INSTANCE_COUNT' in attributes_to_check and 'MAX_INSTANCE_COUNT' in attributes_to_check:
-        if not 0 < int(config['MIN_INSTANCE_COUNT']) <= int(config['MAX_INSTANCE_COUNT']):
-            return False, "MIN_INSTANCE_COUNT and MAX_INSTANCE_COUNT should be such that "\
-                          " 0 < MIN_INSTANCE_COUNT <= MAX_INSTANCE_COUNT"
-
-    if 'PEM_PATH' in attributes_to_check and 'PEM_FILE' in attributes_to_check:
-        pem_path = join(config['PEM_PATH'], config['PEM_FILE'])
-        if not exists(abspath(expanduser(pem_path))):
-            return False, ".pem file {} could not be found".format(pem_path)
-
-    return True, "valid"
+    _as_dict = lambda lines: (dict(map(lambda x: _unquote(x.strip()), l.split('='))
+                              for l in lines if not l.startswith("#") and "=" in l))
+    if property_file:
+        config.__dict__.update(_as_dict(property_file))

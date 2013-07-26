@@ -12,22 +12,16 @@ class WolphinException(Exception):
         self.message = message
 
     def __str__(self):
-        return self.message
+        return "{}: {}".format(self.__class__.__name__, self.message)
 
 
 class NoRunningInstances(WolphinException):
     """
     Raised when a project has no running instances.
     """
+
     def __init__(self, message=None):
-        """
-        WolphinException constructor
-
-        :param message: error message for the exception
-        """
-
-        super(NoRunningInstances, self).__init__(err_msg("No Running Instances found{}",
-                                                         message))
+        super(NoRunningInstances, self).__init__(message)
 
 
 class EC2InstanceLimitExceeded(WolphinException):
@@ -36,9 +30,7 @@ class EC2InstanceLimitExceeded(WolphinException):
     """
 
     def __init__(self, message=None):
-
-        super(EC2InstanceLimitExceeded, self).__init__(err_msg("EC2 instance limit exceeded{}",
-                                                               message))
+        super(EC2InstanceLimitExceeded, self).__init__(message)
 
 
 class InvalidWolphinConfiguration(WolphinException):
@@ -47,11 +39,4 @@ class InvalidWolphinConfiguration(WolphinException):
     """
 
     def __init__(self, message=None):
-
-        super(InvalidWolphinConfiguration, self).__init__(err_msg("Invalid Wolphin Configuration{}",
-                                                                  message))
-
-
-def err_msg(base, extension=None):
-    message = ": {}".format(extension) if extension is not None else ""
-    return base.format(message)
+        super(InvalidWolphinConfiguration, self).__init__(message)

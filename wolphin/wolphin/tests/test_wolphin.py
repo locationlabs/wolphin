@@ -1,59 +1,26 @@
-import mock
+from mock import Mock, patch
 from nose.tools import eq_, ok_
 
 from wolphin.project import WolphinProject
-from wolphin.tests.mock_boto import connect_to_region
-
-
-STATES = {
-    'pending': 0,
-    'running': 16,
-    'shutting-down': 32,
-    'stopping': 64,
-    'stopped': 80,
-    'terminated': 48
-}
-
-
-def mock_config():
-    return {
-        'PROJECT': 'test_project',
-        'EMAIL': 'devnull@locationlabs.com',
-        'REGION': 'mock_region',
-        'AMI_ID': 'mock_ami',
-        'INSTANCE_TYPE': 'mock_type',
-        'USER': 'mock_user',
-        'INSTANCE_AVAILABILITYZONE': 'mock_zone',
-        'INSTANCE_SECURITYGROUP': 'mock_security_group',
-        'MIN_INSTANCE_COUNT': 5,
-        'MAX_INSTANCE_COUNT': 10,
-        'AMAZON_KEYPAIR_NAME': 'mock_keypair_name',
-        'AWS_ACCESS_KEY_ID': 'mock_key_id',
-        'AWS_SECRET_KEY': 'mock_secret_key',
-        'MAX_WAIT_TRIES': 1,
-        'MAX_WAIT_DURATION': 1
-    }
+from wolphin.config import Configuration
+from wolphin.tests.mock_boto import MockEC2Connection, STATES
 
 
 class TestWolphin(object):
     """Tests for WolphinProject"""
 
     def setUp(self):
-        self.config = mock_config()
 
-        self.project = WolphinProject(config=self.config,
-                                      config_validator=mock.Mock(return_value=(True, "")),
-                                      connection=connect_to_region(self.config['REGION'],
-                                                                   aws_access_key_id=
-                                                                   self.config['AWS_ACCESS_KEY_ID'],
-                                                                   aws_secret_access_key=
-                                                                   self.config['AWS_SECRET_KEY']))
+        config = Configuration(project="test_project")
+        config.validate = Mock(return_value=(True, ""))
+        with patch('wolphin.project.connect_to_region', Mock(return_value=MockEC2Connection())):
+            self.project = WolphinProject(config)
 
     def _multi_state_setup(self):
         """Sets up an initial project state with instances in valied states"""
 
-        self.project.config['MIN_INSTANCE_COUNT'] = 15
-        self.project.config['MAX_INSTANCE_COUNT'] = 15
+        self.project.config.min_instance_count = 15
+        self.project.config.max_instance_count = 15
 
         self.project.create()
         # working with a mix of states to start with
@@ -105,7 +72,7 @@ class TestWolphin(object):
         for k, v in self.project.conn.INSTANCES.iteritems():
             instance_count += 1 if state == v.state else 0
         eq_(len(base_set) + instance_count_offset, instance_count)
-        eq_(self.project.config['MAX_INSTANCE_COUNT'] + instance_count_offset,
+        eq_(self.project.config.max_instance_count + instance_count_offset,
             len(self.project.conn.INSTANCES))
 
     def test_create(self):
@@ -113,9 +80,9 @@ class TestWolphin(object):
 
         eq_(0, len(self.project.conn.INSTANCES))
         self.project.create()
-        ok_(self.config['MIN_INSTANCE_COUNT']
+        ok_(self.project.config.min_instance_count
             <= len(self.project.conn.INSTANCES)
-            <= self.config['MAX_INSTANCE_COUNT'])
+            <= self.project.config.max_instance_count)
         for k, v in self.project.conn.INSTANCES.iteritems():
             eq_('running', v.state)
 
@@ -131,16 +98,16 @@ class TestWolphin(object):
         self._assert_post_action_multi_state('running',
                                              base_set,
                                              instance_count_offset=
-                                             self.config['MAX_INSTANCE_COUNT'] - len(base_set))
+                                             self.project.config.max_instance_count - len(base_set))
 
     def test_start_already_started(self):
         """Test if start works fine with already started instances"""
 
         self.project.create()
         self.project.start()
-        ok_(self.config['MIN_INSTANCE_COUNT']
+        ok_(self.project.config.min_instance_count
             <= len(self.project.conn.INSTANCES)
-            <= self.config['MAX_INSTANCE_COUNT'])
+            <= self.project.config.max_instance_count)
         for k, v in self.project.conn.INSTANCES.iteritems():
             eq_('running', v.state)
 
@@ -158,9 +125,9 @@ class TestWolphin(object):
 
         self.project.create()
         self.project.stop()
-        ok_(self.config['MIN_INSTANCE_COUNT']
+        ok_(self.project.config.min_instance_count
             <= len(self.project.conn.INSTANCES)
-            <= self.config['MAX_INSTANCE_COUNT'])
+            <= self.project.config.max_instance_count)
         for k, v in self.project.conn.INSTANCES.iteritems():
             eq_('stopped', v.state)
 
@@ -170,24 +137,24 @@ class TestWolphin(object):
         when there are no instances to work with.
         """
 
+        functions = [
+            self.project.start,
+            self.project.stop,
+            self.project.terminate,
+            self.project.reboot,
+            self.project.revert
+        ]
+
         if simulate_terminated:
             self.project.create()
             self.project.terminate()
-        if function == 1:
-            self.project.start()
-        elif function == 2:
-            self.project.stop()
-        elif function == 3:
-            self.project.terminate()
-        elif function == 4:
-            self.project.reboot()
-        elif function == 5:
-            self.project.revert()
+
+        functions[function]()
 
         if simulate_terminated:
-            ok_(self.config['MIN_INSTANCE_COUNT']
+            ok_(self.project.config.min_instance_count
                 <= len(self.project.conn.INSTANCES)
-                <= self.config['MAX_INSTANCE_COUNT'])
+                <= self.project.config.max_instance_count)
             for k, v in self.project.conn.INSTANCES.iteritems():
                 eq_('terminated', v.state)
         else:
@@ -199,8 +166,8 @@ class TestWolphin(object):
         simulate_cases = [False, True]
 
         for simulate in simulate_cases:
-            for x in range(5):
-                yield (self._assert_normal_operation_no_instances, x, simulate)
+            for function in range(5):
+                yield (self._assert_normal_operation_no_instances, function, simulate)
 
     def test_stop(self):
         """Test stop with multiple already existing instances having varied initial states"""
@@ -370,14 +337,15 @@ class TestWolphin(object):
                                 final_state):
         """Test that  wait_for_status function works as expected"""
 
-        self.project.config['MAX_WAIT_TRIES'] = 4
-        self.project.config['MAX_WAIT_DURATION'] = 0
-        self.project.config['MIN_INSTANCE_COUNT'] = instance_count
-        self.project.config['MAX_INSTANCE_COUNT'] = instance_count
+        self.project.config.max_wait_tries = 4
+        self.project.config.max_wait_duration = 0
+        self.project.config.min_instance_count = instance_count
+        self.project.config.max_instance_count = instance_count
         self.project.create()
         instances = []
         for k, v in self.project.conn.INSTANCES.iteritems():
             v.custom_instance_update_seq = update_seq
+            v.custom_instance_update_seq_loc = 0
             v.state = wait_from
             v.state_code = STATES[wait_from]
             instances.append(v)

@@ -15,25 +15,10 @@ STATES = {
 }
 
 
-def connect_to_region(region,
-                      aws_access_key_id=None,
-                      aws_secret_access_key=None):
-    return MockEC2Connection(aws_access_key_id=aws_access_key_id,
-                             aws_secret_access_key=aws_secret_access_key,
-                             region=region)
-
-
 class MockEC2Connection(object):
-    def __init__(self,
-                 aws_access_key_id,
-                 aws_secret_access_key,
-                 region=None,
-                 custom_instance_update_seq=None):
-        self.aws_secret_access_key = aws_secret_access_key
-        self.aws_access_key_id = aws_access_key_id
+    def __init__(self):
         self.instance_limit = 20
         self.INSTANCES = dict()
-        self.custom_instance_update_seq = custom_instance_update_seq
 
     def get_non_terminated_instances(self):
         instances = []
@@ -78,8 +63,7 @@ class MockEC2Connection(object):
                                 key_name=key_name,
                                 security_groups=security_groups,
                                 instance_type=instance_type,
-                                placement=placement,
-                                custom_instance_update_seq=self.custom_instance_update_seq)
+                                placement=placement)
             self.INSTANCES[instance.id] = instance
             instances.append(instance)
 
@@ -123,8 +107,7 @@ class Instance(object):
                  key_name,
                  security_groups,
                  instance_type,
-                 placement,
-                 custom_instance_update_seq=None):
+                 placement):
 
         self.id = "i-{}".format(uuid.uuid4())
         self.public_dns_name = "{}.wolphin.example.com".format(uuid.uuid4())
@@ -142,7 +125,7 @@ class Instance(object):
         self.state = 'pending'
         self.tags = dict()
         self.launch_time = str(datetime.datetime.now())
-        self.custom_instance_update_seq = custom_instance_update_seq
+        self.custom_instance_update_seq = []
         self.custom_instance_update_seq_loc = 0
 
     def start(self):
@@ -166,7 +149,7 @@ class Instance(object):
     def update(self):
         'Mock changing over from a transitioning to a stable state'
 
-        if self.custom_instance_update_seq is not None:
+        if self.custom_instance_update_seq:
             # cycle through the custom update sequence every time update is called,
             # if custom update sequence exists.
             index = self.custom_instance_update_seq_loc
