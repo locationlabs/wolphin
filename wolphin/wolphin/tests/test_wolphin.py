@@ -35,23 +35,18 @@ class TestWolphin(object):
 
         for x in range(0, 2):
             self.project.conn.INSTANCES[instance_ids[x]].state = 'stopping'
-            self.project.conn.INSTANCES[instance_ids[x]].state_code = STATES['stopping']
             stopping.append(instance_ids[x])
         for x in range(2, 4):
             self.project.conn.INSTANCES[instance_ids[x]].state = 'stopped'
-            self.project.conn.INSTANCES[instance_ids[x]].state_code = STATES['stopped']
             stopped.append(instance_ids[x])
         for x in range(4, 6):
             self.project.conn.INSTANCES[instance_ids[x]].state = 'shutting-down'
-            self.project.conn.INSTANCES[instance_ids[x]].state_code = STATES['shutting-down']
             shutting_down.append(instance_ids[x])
         for x in range(6, 8):
             self.project.conn.INSTANCES[instance_ids[x]].state = 'terminated'
-            self.project.conn.INSTANCES[instance_ids[x]].state_code = STATES['terminated']
             terminated.append(instance_ids[x])
         for x in range(8, 10):
             self.project.conn.INSTANCES[instance_ids[x]].state = 'pending'
-            self.project.conn.INSTANCES[instance_ids[x]].state_code = STATES['pending']
             pending.append(instance_ids[x])
         for x in range(10, 15):
             running.append(instance_ids[x])
@@ -347,7 +342,6 @@ class TestWolphin(object):
             v.custom_instance_update_seq = update_seq
             v.custom_instance_update_seq_loc = 0
             v.state = wait_from
-            v.state_code = STATES[wait_from]
             instances.append(v)
         self.project._wait_for_status(instances, STATES[wait_from], STATES[wait_till])
         for instance in instances:

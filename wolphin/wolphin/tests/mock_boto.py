@@ -121,7 +121,6 @@ class Instance(object):
             self.groups.append(Group(group_name))
         self.instance_type = instance_type
         self.placement = placement
-        self.state_code = STATES['pending']
         self.state = 'pending'
         self.tags = dict()
         self.launch_time = str(datetime.datetime.now())
@@ -130,17 +129,14 @@ class Instance(object):
 
     def start(self):
         if self.state_code != STATES['terminated'] and self.state_code != STATES['running']:
-            self.state_code = STATES['pending']
             self.state = 'pending'
 
     def stop(self):
         if self.state_code != STATES['terminated'] and self.state_code != STATES['stopped']:
-            self.state_code = STATES['stopping']
             self.state = 'stopping'
 
     def terminate(self):
         if self.state_code != STATES['terminated']:
-            self.state_code = STATES['shutting-down']
             self.state = 'shutting-down'
 
     def reboot(self):
@@ -155,14 +151,14 @@ class Instance(object):
             index = self.custom_instance_update_seq_loc
             index = 0 if index == len(self.custom_instance_update_seq) else index
             self.state = self.custom_instance_update_seq[index]
-            self.state_code = STATES[self.state]
             self.custom_instance_update_seq_loc = index + 1
         elif self.state_code == STATES['pending']:
-            self.state_code = STATES['running']
             self.state = 'running'
         elif self.state_code == STATES['stopping']:
-            self.state_code = STATES['stopped']
             self.state = 'stopped'
         elif self.state_code == STATES['shutting-down']:
-            self.state_code = STATES['terminated']
             self.state = 'terminated'
+
+    @property
+    def state_code(self):
+        return STATES[self.state]

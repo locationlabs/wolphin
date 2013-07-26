@@ -10,7 +10,7 @@ __build__ = ''
 setup(name='wolphin',
       version=__version__ + __build__,
       description='Wolphin is a cousin of Boto. '
-                  'It can manages Amazon ec2 instances for your project.',
+                  'It can manage Amazon ec2 instances for your project.',
       author='Location Labs',
       author_email='info@locationlabs.com',
       url='http://locationlabs.com',

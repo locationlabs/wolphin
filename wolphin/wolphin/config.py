@@ -126,8 +126,10 @@ def parse_property_file(config, property_file):
     :param property_file: the file containing the properties to overrife the ``config`` with.
     """
 
-    _unquote = lambda word: (word[1:-1] if ((word.startswith('"') and word.endswith('"')) or
-                             (word.startswith("'") and word.endswith("'"))) else word)
+    _unquote = lambda word: (word[1:-1]
+                             if ((word.startswith('"') and word.endswith('"')) or
+                                 (word.startswith("'") and word.endswith("'")))
+                             else word)
 
     _as_dict = lambda lines: (dict(map(lambda x: _unquote(x.strip()), l.split('='))
                               for l in lines if not l.startswith("#") and "=" in l))
