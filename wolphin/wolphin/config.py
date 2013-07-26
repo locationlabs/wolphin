@@ -120,7 +120,7 @@ def parse_property_file(config, property_file):
 
     All comments (anything after a '#') are ignored from the ``property_file``. Moreover, all
     comments should be on a separate line and not as a continuation of the property, e.g.:
-        k = v # comment  - id not considered valid.
+        k = v # comment  - is not considered valid.
 
     :param config: the config object to be updated with the values from the property_file.
     :param property_file: the file containing the properties to overrife the ``config`` with.
