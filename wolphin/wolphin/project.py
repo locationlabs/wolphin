@@ -12,7 +12,7 @@ from time import sleep
 
 class WolphinProject(object):
 
-    def __init__(self, config, connection=None):
+    def __init__(self, config):
 
         self.STATES = {
             'pending': 0,
@@ -29,17 +29,9 @@ class WolphinProject(object):
             raise InvalidWolphinConfiguration(err_msg)
 
         self.config = config
-        self.conn = connection
-        self._connect()
-
-    def _connect(self):
-
-        self.conn = (
-            self.conn or
-            connect_to_region(self.config.region,
-                              aws_access_key_id=self.config.aws_access_key_id,
-                              aws_secret_access_key=self.config.aws_secret_key)
-        )
+        self.conn = connect_to_region(self.config.region,
+                                      aws_access_key_id=self.config.aws_access_key_id,
+                                      aws_secret_access_key=self.config.aws_secret_key)
 
     def create(self):
         """
