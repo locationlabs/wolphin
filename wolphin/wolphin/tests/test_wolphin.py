@@ -297,8 +297,8 @@ class TestWolphin(object):
         for instance in result:
             ok_(instance.state not in ['terminated', 'shutting-down'])
 
-    def test_get_all_project_instances(self):
-        result = self.project.get_all_project_instances()
+    def test_get_all_instances(self):
+        result = self.project.get_all_instances()
         instance_ids = self.project.conn.INSTANCES.keys()
 
         eq_(len(instance_ids), len(result))
@@ -355,13 +355,13 @@ class TestWolphin(object):
             instance_numbers.append(int(splits[-1].split("_")[0]))
         return instance_numbers
 
-    def _assert_wait_for_status(self,
-                                instance_count,
-                                update_seq,
-                                wait_from,
-                                wait_till,
-                                final_state):
-        """Test that  wait_for_status function works as expected"""
+    def _assert_wait_for_transition(self,
+                                    instance_count,
+                                    update_seq,
+                                    wait_from,
+                                    wait_till,
+                                    final_state):
+        """Test that the _wait_for_transition function works as expected"""
 
         self.project.config.max_wait_tries = 4
         self.project.config.max_wait_duration = 0
@@ -374,12 +374,12 @@ class TestWolphin(object):
             v.custom_instance_update_seq_loc = 0
             v.state = wait_from
             instances.append(v)
-        self.project._wait_for_status(instances, STATES[wait_from], STATES[wait_till])
+        self.project._wait_for_transition(instances, STATES[wait_from], STATES[wait_till])
         for instance in instances:
             eq_(final_state, instance.state)
         eq_(len(instances), len(self.project.conn.INSTANCES))
 
-    def test_wait_for_status(self):
+    def test_wait_for_transition(self):
         test_cases = [('stopping', ['stopping', 'stopping', 'stopping', 'stopped'], 'stopped'),
                       ('stopping', ['stopping', 'stopped'], 'stopped'),
                       ('stopping', ['stopped', ], 'stopped'),
@@ -387,7 +387,7 @@ class TestWolphin(object):
                        'stopping')]
         for x in range(1, 3):
             for wait_from, update_seq, final_state in test_cases:
-                yield (self._assert_wait_for_status,
+                yield (self._assert_wait_for_transition,
                        x,
                        update_seq,
                        wait_from,

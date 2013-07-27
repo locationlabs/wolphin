@@ -38,16 +38,11 @@ def controller():
                         dest="email",
                         help="Email of the project owner.")
 
-    parser.add_argument("-a", "--auth",
-                        dest="auth_credentials_file",
-                        type=argparse.FileType('r'),
-                        help="Path to the file containing authentication "
-                             "credentials for amazon/ec2.")
-
     parser.add_argument("-c", "--config",
-                        dest="user_ec2_args_file",
+                        nargs='*',
+                        dest="config_files",
                         type=argparse.FileType('r'),
-                        help="Path to the file containing overrides for the default wolphin "
+                        help="Path to the file(s) containing overrides for the default wolphin "
                              "project configuration.")
 
     parser.add_argument("-i", "--instance",
@@ -66,11 +61,7 @@ def controller():
 
     args, extra = parser.parse_known_args()
 
-    if args.auth_credentials_file is None:
-        parser.error("credentials required.")
-
-    config = Configuration.create(args.auth_credentials_file,
-                                  args.user_ec2_args_file)
+    config = Configuration.create(*args.config_files)
     config.email = args.email or config.email
     config.project = args.project or config.project
 
