@@ -437,8 +437,8 @@ class WolphinProject(object):
 
         self.conn.create_tags(instance.id,
                               {"Name": "wolphin.{}.{}".format(self.config.project, suffix),
-                              "ProjectName": "wolphin.{}".format(self.config.project),
-                              "OwnerEmail": self.config.email})
+                               "ProjectName": "wolphin.{}".format(self.config.project),
+                               "OwnerEmail": self.config.email})
 
     def _wait_for_status(self, instances, state_code=None, new_state_code=None):
         """
