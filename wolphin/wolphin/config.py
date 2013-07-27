@@ -16,7 +16,7 @@ class Configuration(object):
     DEFAULT_MAX_INSTANCE_COUNT = 1
 
     DEFAULT_MAX_WAIT_TRIES = 12
-    DEFAULT_MAX_WAIT_DURATION = 5
+    DEFAULT_MAX_WAIT_DURATION = 10
 
     def __init__(self,
                  project=None,

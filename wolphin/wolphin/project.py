@@ -1,13 +1,13 @@
-from wolphin.attribute_dict import AttributeDict
-from wolphin.exceptions import (InvalidWolphinConfiguration,
-                                EC2InstanceLimitExceeded,
-                                WolphinException)
+from time import sleep
 
 from boto.exception import EC2ResponseError
 from boto.ec2 import connect_to_region
 from gusset.colortable import ColorTable
 
-from time import sleep
+from wolphin.attribute_dict import AttributeDict
+from wolphin.exceptions import (InvalidWolphinConfiguration,
+                                EC2InstanceLimitExceeded,
+                                WolphinException)
 
 
 class WolphinProject(object):
@@ -246,7 +246,7 @@ class WolphinProject(object):
 
         self._wait_for_shutting_down_instances(instances)
 
-        return self.status(instances=instances)
+        return self.status(instance_numbers=instance_numbers)
 
     def get_healthy_instances(self, instance_numbers=None):
         """
@@ -295,12 +295,12 @@ class WolphinProject(object):
 
     def _get_instances_from_reservations(self, reservations):
         """Flatten all reservations to get one instances list"""
-        instances = []
-        if reservations is not None:
-            for reservation in reservations:
-                for instance in reservation.instances:
-                    instance.update()
-                    instances.append(instance)
+
+        instances = [i for reservation in reservations or [] for i in reservation.instances]
+
+        for instance in instances:
+            instance.update()
+
         return instances
 
     def _reserve(self, needed_min=None, needed_max=None):
