@@ -12,7 +12,7 @@ class WolphinException(Exception):
         self.message = message
 
     def __str__(self):
-        return "{}: {}".format(self.__class__.__name__, self.message)
+        return self.message
 
 
 class NoRunningInstances(WolphinException):

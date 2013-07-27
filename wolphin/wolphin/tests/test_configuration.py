@@ -1,7 +1,7 @@
 from nose.tools import raises, eq_, ok_
 
 from wolphin.exceptions import InvalidWolphinConfiguration
-from wolphin.config import Configuration, parse_property_file
+from wolphin.config import Configuration
 from wolphin.project import WolphinProject
 
 
@@ -76,7 +76,7 @@ class TestConfiguration(object):
             '# something = x'          # commented attribute, must not be in the config.
         ]
         config = Configuration()
-        parse_property_file(config, lines)
+        config.parse_config_file(lines)
         eq_('test_zone', config.zone)
         eq_('test_region', config.region)
         eq_(2, int(config.tries))
