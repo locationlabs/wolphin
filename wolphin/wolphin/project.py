@@ -73,7 +73,7 @@ class WolphinProject(object):
             except EC2ResponseError:
                 instance.start()
 
-        if needed_max > 0:
+        if needed_max:
             # boto requires minimum number of instances requested to be 1
             needed_min = 1 if needed_min < 1 else needed_min
 
@@ -82,8 +82,7 @@ class WolphinProject(object):
             instances = self.get_all_instances()
             counter = max(0, *[self._get_instance_number(i) for i in instances]) if instances else 0
 
-            print ("Requesting between {} and {} EC2 instances"
-                   " for project: {} ....".format(needed_min, needed_max, self.config.project))
+            print ("Requesting between {} and {} EC2 instances ....".format(needed_min, needed_max))
 
             reservation = self._reserve(needed_min, needed_max)
             provided = len(reservation.instances)
@@ -101,7 +100,7 @@ class WolphinProject(object):
         self._wait_for_transition(healthy, new_state_code=self.STATES['running'])
 
         print ("{} ec2 instances ready for project "
-               "{}".format(len(self.get_instances_in_state(self.STATES['running'])),
+               "{}".format(len(self.get_instances_in_states([self.STATES['running']])),
                            self.config.project))
 
         return self.status()
@@ -113,14 +112,16 @@ class WolphinProject(object):
         # they are in the middle of stopping.
         self._wait_for_stopping_instances(instance_numbers=instance_numbers)
 
-        # start the instances that are not already running and not pending to start,
-        # or not stopped yet.
-        instances = self.get_healthy_instances(instance_numbers=instance_numbers)
+        # start the instances that are not already running, pending to start, or stopping.
+        instances = [i for i in self.get_instances_in_states([self.STATES['shutting-down'],
+                                                              self.STATES['terminated'],
+                                                              self.STATES['stopping'],
+                                                              self.STATES['pending'],
+                                                              self.STATES['running']],
+                                                             inverse_select=True,
+                                                             instance_numbers=instance_numbers)]
         for instance in instances:
-            if instance.state_code not in [self.STATES['stopping'],
-                                           self.STATES['running'],
-                                           self.STATES['pending']]:
-                instance.start()
+            instance.start()
 
         self._wait_for_starting_instances(instances=instances)
 
@@ -133,14 +134,16 @@ class WolphinProject(object):
         # they are in the middle of starting.
         self._wait_for_starting_instances(instance_numbers=instance_numbers)
 
-        # stop the instances that are not already stopping or stopped or pending.
-        instances = self.get_healthy_instances(instance_numbers=instance_numbers)
-
+        # stop the instances that are not already stopping, stopped or pending.
+        instances = [i for i in self.get_instances_in_states([self.STATES['shutting-down'],
+                                                              self.STATES['terminated'],
+                                                              self.STATES['pending'],
+                                                              self.STATES['stopping'],
+                                                              self.STATES['stopped']],
+                                                             inverse_select=True,
+                                                             instance_numbers=instance_numbers)]
         for instance in instances:
-            if instance.state_code not in [self.STATES['pending'],
-                                           self.STATES['stopping'],
-                                           self.STATES['stopped']]:
-                instance.stop()
+            instance.stop()
 
         self._wait_for_stopping_instances(instances=instances)
 
@@ -152,62 +155,43 @@ class WolphinProject(object):
         return self.status(instance_numbers=instance_numbers)
 
     def revert(self, sequential=False, instance_numbers=None):
-        """
-        Given the instances requested to be reverted:
-         For each such instance:
-          - saves the instance number
-          - change the instance number on the one being terminated to <instance number>_terminated
-          - run a new instance
-          - tag it with this previous instance number.
-        """
+        """Revert project instances"""
 
         print "Starting reverting ....",
         instances = self.get_healthy_instances(instance_numbers=instance_numbers)
         print len(instances), "instances ..",
-        if sequential:
+        if instances and sequential:
             print "sequentially ...."
             for instance in instances:
-                instance_number = self._get_instance_number(instance)
-                self._tag_instance(instance, "{}_terminated".format(instance_number))
-                instance.terminate()
-                self._wait_for_transition([instance, ],
-                                          state_code=self.STATES['shutting-down'],
-                                          new_state_code=self.STATES['terminated'])
-                print "Getting a new instance ...."
-                reservation = self._reserve(1, 1)
-                instances = reservation.instances
-                print len(instances), "received from Amazon."
-                self._tag_instance(instances[0], instance_number)
-                self._wait_for_transition(instances, state_code=self.STATES['pending'],
-                                          new_state_code=self.STATES['running'])
+                self._revert([instance])
 
-        else:
+        elif instances:
             print "in a batch ...."
-            instance_numbers = []
-            for instance in instances:
-                instance_number = self._get_instance_number(instance)
-                instance_numbers.append(instance_number)
-                self._tag_instance(instance, "{}_terminated".format(instance_number))
-                instance.terminate()
-            self._wait_for_transition(instances,
-                                      state_code=self.STATES['shutting-down'],
-                                      new_state_code=self.STATES['terminated'])
-
-            instances_needed = len(instance_numbers)
-            print "Getting {} new instances {} ....".format(instances_needed, instance_numbers)
-            if instances_needed > 0:
-                reservation = self._reserve(instances_needed, instances_needed)
-                instances = reservation.instances
-                print len(instances), "received from Amazon."
-                counter = 0
-                for instance_number in instance_numbers:
-                    self._tag_instance(instances[counter], instance_number)
-                    counter += 1
-                self._wait_for_transition(instances,
-                                          state_code=self.STATES['pending'],
-                                          new_state_code=self.STATES['running'])
+            self._revert(instances)
 
         return self.status(instance_numbers=instance_numbers)
+
+    def _revert(self, instances):
+        """
+        Given the instances requested to be reverted:
+        For each such instance:
+         - saves the instance numbers
+         - change the instance numbers on the ones being terminated to <instance number>_terminated
+         - run new instances
+         - tag each new instance with a previous instance number
+        """
+
+        instance_numbers = [self._get_instance_number(i) for i in instances]
+        self.terminate(instance_numbers=instance_numbers)
+        print "Getting a new reservation ...."
+        if instance_numbers:
+            new_instances = self._reserve(len(instance_numbers), len(instance_numbers)).instances
+            print len(new_instances), "received from Amazon."
+            counter = 0
+            for instance_number in instance_numbers:
+                self._tag_instance(new_instances[counter], instance_number)
+                counter += 1
+            self._wait_for_starting_instances(instances=new_instances)
 
     def status(self, instances=None, instance_numbers=None):
         """Returns the statuses of requested wolphin project instances"""
@@ -253,15 +237,17 @@ class WolphinProject(object):
         Returns instances that are not terminated and not going towards termination (shutting-down).
         """
 
-        return [i for i in self._select_instances(instance_numbers=instance_numbers)
-                if i.state_code not in [self.STATES['terminated'], self.STATES['shutting-down']]]
+        return self.get_instances_in_states([self.STATES['terminated'],
+                                             self.STATES['shutting-down']],
+                                            inverse_select=True,
+                                            instance_numbers=instance_numbers)
 
-    def get_instances_in_state(self, state_code, instance_numbers=None):
-        """Returns project instances that are in the given ``state_code``"""
-        if state_code not in self.STATES.itervalues():
-            return []
-        return [i for i in self._select_instances(instance_numbers=instance_numbers)
-                if i.state_code == state_code]
+    def get_instances_in_states(self, state_codes, inverse_select=False, instance_numbers=None):
+        """Returns project instances that are in the given ``state_codes``"""
+
+        instances = self._select_instances(instance_numbers=instance_numbers)
+        return ([i for i in instances if i.state_code not in state_codes] if inverse_select
+                else [i for i in instances if i.state_code in state_codes])
 
     def get_instances(self, instance_name_suffix):
         """Gets the ec2 instance(s) by its wolphin project instance name"""
@@ -334,21 +320,11 @@ class WolphinProject(object):
         return reservation
 
     def _select_instances(self, instance_numbers=None):
-        """gets the instances based on the self.config"""
+        """Gets the instances based on self.config"""
 
-        instances = []
-
-        # see if only a specific host's status is needed
-        if instance_numbers:
-            for instance_number in instance_numbers:
-                got_instances = self.get_instances(instance_number)
-                if got_instances:
-                    for instance in got_instances:
-                        instances.append(instance)
-        else:
-            # if no single host specified then get by the project
-            instances = self.get_all_instances()
-        return instances
+        # get the list of instances if only a specific host's status is needed else get all.
+        return ([i for number in instance_numbers for i in self.get_instances(number) or []]
+                if instance_numbers else self.get_all_instances())
 
     def _tag_instance(self, instance, suffix):
         """
@@ -404,24 +380,24 @@ class WolphinProject(object):
     def _wait_for_starting_instances(self, instances=None, instance_numbers=None):
         print "Waiting for pending instances to start ...."
         self._wait_for_transition(instances or
-                                  self.get_instances_in_state(self.STATES['pending'],
-                                                              instance_numbers=instance_numbers),
+                                  self.get_instances_in_states([self.STATES['pending']],
+                                                               instance_numbers=instance_numbers),
                                   state_code=self.STATES['pending'],
                                   new_state_code=self.STATES['running'])
 
     def _wait_for_shutting_down_instances(self, instances=None, instance_numbers=None):
         print "Waiting for shutting-down instances to terminate ...."
         self._wait_for_transition(instances or
-                                  self.get_instances_in_state(self.STATES['shutting-down'],
-                                                              instance_numbers=instance_numbers),
+                                  self.get_instances_in_states([self.STATES['shutting-down']],
+                                                               instance_numbers=instance_numbers),
                                   state_code=self.STATES['shutting-down'],
                                   new_state_code=self.STATES['terminated'])
 
     def _wait_for_stopping_instances(self, instances=None, instance_numbers=None):
         print "Waiting for stopping instances to stop ...."
         self._wait_for_transition(instances or
-                                  self.get_instances_in_state(self.STATES['stopping'],
-                                                              instance_numbers=instance_numbers),
+                                  self.get_instances_in_states([self.STATES['stopping']],
+                                                               instance_numbers=instance_numbers),
                                   state_code=self.STATES['stopping'],
                                   new_state_code=self.STATES['stopped'])
 

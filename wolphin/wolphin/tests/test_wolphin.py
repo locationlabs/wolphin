@@ -333,7 +333,7 @@ class TestWolphin(object):
             STATES['shutting-down']: shutting_down,
             STATES['terminated']: terminated
         }
-        got_instances = self.project.get_instances_in_state(state_code)
+        got_instances = self.project.get_instances_in_states([state_code])
         eq_(len(targets[state_code]), len(got_instances))
         for i in got_instances:
             ok_(i.id in targets[state_code])
