@@ -144,8 +144,7 @@ ec2 instances:
     from wolphin.generator import wolphin_project
 
 
-    config = Configuration()
-    project = WolphinProject(config)
+    project = WolphinProject.new(Configuration())
 
     # create instances under the project.
     project.create()

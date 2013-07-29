@@ -39,7 +39,7 @@ def controller():
                         help="Email of the project owner.")
 
     parser.add_argument("-c", "--config",
-                        nargs='*',
+                        nargs='+',
                         dest="config_files",
                         type=argparse.FileType('r'),
                         help="Path to the file(s) containing overrides for the default wolphin "
@@ -65,7 +65,8 @@ def controller():
     config.email = args.email or config.email
     config.project = args.project or config.project
 
-    project = WolphinProject(config)
+    project = WolphinProject.new(config)
+
     try:
         if args.command == "status":
             status_info = project.status(instance_numbers=args.project_instances)
@@ -73,7 +74,7 @@ def controller():
             status_info = project.create()
         elif args.command == "info":
             for _ in wolphin_project(project, instance_numbers=args.project_instances):
-                run("uname -a; users; cat ~/.ssh/authorized_keys; ifconfig -a; pwd; ls -al")
+                run("uname -a; users")
         elif args.command == "start":
             status_info = project.start(instance_numbers=args.project_instances)
         elif args.command == "stop":
@@ -85,8 +86,6 @@ def controller():
         elif args.command == "revert":
             status_info = project.revert(instance_numbers=args.project_instances,
                                          sequential=args.sequential)
-        else:
-            parser.error("Unknown wolphin command: {}".format(args.command))
 
         if args.command != "info":
             print_status(status_info)
@@ -94,7 +93,6 @@ def controller():
     except WolphinException as ex:
         print ex
         sys.exit(1)
-    sys.exit(0)
 
 if __name__ == '__main__':
     controller()

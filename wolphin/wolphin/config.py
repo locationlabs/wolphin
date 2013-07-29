@@ -1,6 +1,8 @@
 import re
 from os.path import expanduser, abspath, exists, join
 
+from wolphin.exceptions import InvalidWolphinConfiguration
+
 
 class Configuration(object):
     """Configuration for any Wolphin project"""
@@ -104,19 +106,21 @@ class Configuration(object):
 
         for k, v in self.__dict__.iteritems():
             if not v:
-                return False, "{} is missing or None.".format(k)
+                raise InvalidWolphinConfiguration("{} is missing or None.".format(k))
 
         # some basic email validation.
         if not re.compile(".+@.+[.].+").match(self.email):
-            return False, "email: '{}' is not valid".format(self.email)
+            raise InvalidWolphinConfiguration("email: '{}' is not valid".format(self.email))
 
         # min and max instance count validation.
         if not 0 < int(self.min_instance_count) <= int(self.max_instance_count):
-            return False, ("min_instance_count and max_instance_count should be such that "
-                           " 0 < min_instance_count <= max_instance_count")
+            raise InvalidWolphinConfiguration("min_instance_count and max_instance_count should be"
+                                              " such that 0 < min_instance_count <="
+                                              " max_instance_count")
 
         if not exists(self.ssh_key_file):
-            return False, ".pem file {} could not be found".format(self.ssh_key_file)
+            raise InvalidWolphinConfiguration(".pem file {} could not be found"
+                                              .format(self.ssh_key_file))
 
         return True, None
 

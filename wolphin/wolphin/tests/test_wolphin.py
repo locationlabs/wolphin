@@ -12,9 +12,10 @@ class TestWolphin(object):
     def setUp(self):
 
         config = Configuration(project="test_project")
+        config.max_wait_duration = 0
         config.validate = Mock(return_value=(True, None))
         with patch('wolphin.project.connect_to_region', Mock(return_value=MockEC2Connection())):
-            self.project = WolphinProject(config)
+            self.project = WolphinProject.new(config)
 
     def _multi_state_setup(self):
         """Sets up an initial project state with instances in valied states"""

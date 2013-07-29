@@ -11,16 +11,8 @@ class TestConfiguration(object):
     def _assert_wolphin_error_raised(self, config, exception):
         @raises(exception)
         def _execute(config):
-            WolphinProject(config)
+            WolphinProject.new(config)
         _execute(config)
-
-    def _assert_validation(self, config, validity):
-        """Assert that validation is done properly"""
-
-        is_valid, msg = config.validate()
-        if ".pem file" not in msg and "could not be found" not in msg:
-            # exclude the .pem file exists check.
-            eq_(validity, is_valid)
 
     @property
     def _config(self):
@@ -29,22 +21,15 @@ class TestConfiguration(object):
             setattr(config, k, v or "test")
         return config
 
-    def test_config(self):
-        """Tests for validation of a valid config"""
-
-        # test for a valid config.
-        yield self._assert_validation, self._config, True
-
     def test_config_with_malformed_values(self):
 
-        for array in [[('min_instance_count', '0')],
-                     [('min_instance_count', '0'), ('max_instance_count', '0')],
-                     [('min_instance_count', '1'), ('max_instance_count', '0')],
-                     [('email', 'a')]]:
+        for data in [dict(min_instance_count='0'),
+                     dict(min_instance_count='0', max_instance_count='0'),
+                     dict(min_instance_count='1', max_instance_count='0'),
+                     dict(email='a')]:
             config = self._config
-            for k, v in array:
+            for k, v in data.iteritems():
                 setattr(config, k, v)
-            yield self._assert_validation, config, False
             yield self._assert_wolphin_error_raised, config, InvalidWolphinConfiguration
 
     def test_config_with_none_values(self):
@@ -61,7 +46,6 @@ class TestConfiguration(object):
             return configs
 
         for config in _generate_none_value_configs():
-            yield self._assert_validation, config, False
             yield self._assert_wolphin_error_raised, config, InvalidWolphinConfiguration
 
     def test_parser(self):

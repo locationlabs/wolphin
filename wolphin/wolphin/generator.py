@@ -5,8 +5,8 @@ from wolphin.exceptions import NoRunningInstances
 
 def wolphin_project(project, instance_numbers=None):
 
-    running_hosts = project.get_instances_in_state(project.STATES['running'],
-                                                   instance_numbers=instance_numbers)
+    running_hosts = project.get_instances_in_states([project.STATES['running']],
+                                                    instance_numbers=instance_numbers)
     if not running_hosts:
         raise NoRunningInstances("project: {}".format(project.config.project))
 
