@@ -156,6 +156,9 @@ ec2 instances:
     # terminate the project(all its instances).
     project.terminate()
 
+
+### Selector
+
 All operations **with the exception of create** can also be performed on a single or only selected
  instances under a project than the project as a whole. this can be done using a selector, e.g.,
  modifying the example above:
