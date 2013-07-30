@@ -10,6 +10,7 @@ from wolphin.project import WolphinProject, print_status
 from wolphin.config import Configuration
 from wolphin.generator import wolphin_project
 from wolphin.exceptions import WolphinException
+from wolphin.selector import InstanceNumberBasedSelector
 
 
 def controller():
@@ -64,28 +65,27 @@ def controller():
     config = Configuration.create(*args.config_files)
     config.email = args.email or config.email
     config.project = args.project or config.project
-
-    project = WolphinProject.new(config)
+    selector = InstanceNumberBasedSelector(instance_numbers=args.project_instances)
+    project = WolphinProject.new(config, selector=selector)
 
     try:
         if args.command == "status":
-            status_info = project.status(instance_numbers=args.project_instances)
+            status_info = project.status()
         elif args.command == "create":
             status_info = project.create()
         elif args.command == "info":
-            for _ in wolphin_project(project, instance_numbers=args.project_instances):
+            for _ in wolphin_project(project):
                 run("uname -a; users")
         elif args.command == "start":
-            status_info = project.start(instance_numbers=args.project_instances)
+            status_info = project.start()
         elif args.command == "stop":
-            status_info = project.stop(instance_numbers=args.project_instances)
+            status_info = project.stop()
         elif args.command == "reboot":
-            status_info = project.reboot(instance_numbers=args.project_instances)
+            status_info = project.reboot()
         elif args.command == "terminate":
-            status_info = project.terminate(instance_numbers=args.project_instances)
+            status_info = project.terminate()
         elif args.command == "revert":
-            status_info = project.revert(instance_numbers=args.project_instances,
-                                         sequential=args.sequential)
+            status_info = project.revert(sequential=args.sequential)
 
         if args.command != "info":
             print_status(status_info)

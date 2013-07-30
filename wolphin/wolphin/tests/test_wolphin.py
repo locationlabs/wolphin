@@ -11,14 +11,15 @@ class TestWolphin(object):
 
     def setUp(self):
 
+        # a config object with defaults and project name override.
         config = Configuration(project="test_project")
         config.max_wait_duration = 0
-        config.validate = Mock(return_value=(True, None))
+        config.validate = Mock()
         with patch('wolphin.project.connect_to_region', Mock(return_value=MockEC2Connection())):
             self.project = WolphinProject.new(config)
 
     def _multi_state_setup(self):
-        """Sets up an initial project state with instances in valied states"""
+        """Sets up an initial project state with instances in varied states"""
 
         self.project.config.min_instance_count = 15
         self.project.config.max_instance_count = 15
@@ -64,9 +65,8 @@ class TestWolphin(object):
             eq_(state, self.project.conn.INSTANCES[instance_id].state)
             eq_(STATES[state], self.project.conn.INSTANCES[instance_id].state_code)
 
-        instance_count = 0
-        for k, v in self.project.conn.INSTANCES.iteritems():
-            instance_count += 1 if state == v.state else 0
+        instance_count = len(filter(lambda instance: instance.state == state,
+                                    self.project.conn.INSTANCES.itervalues()))
         eq_(len(base_set) + instance_count_offset, instance_count)
         eq_(self.project.config.max_instance_count + instance_count_offset,
             len(self.project.conn.INSTANCES))
@@ -174,14 +174,6 @@ class TestWolphin(object):
                                              set(stopping) | set(stopped)
                                              | set(pending) | set(running))
 
-    def test_stop_selective(self):
-        """Test stopping selected instances"""
-
-        stopping, stopped, shutting_down, terminated, pending, running = self._multi_state_setup()
-        instance_ids = [stopping[0], stopped[0], pending[0], running[0]]
-        self.project.stop(instance_numbers=self._get_instance_numbers(instance_ids))
-        self._assert_post_action_multi_state('stopped', set(instance_ids) | set(stopped))
-
     def test_terminate(self):
         """Test terminate with multiple already existing instances having varied initial states"""
 
@@ -192,14 +184,6 @@ class TestWolphin(object):
                                              | set(shutting_down) | set(terminated)
                                              | set(pending) | set(running))
 
-    def test_terminate_selective(self):
-        """Test terminating selected instances"""
-
-        stopping, stopped, shutting_down, terminated, pending, running = self._multi_state_setup()
-        instance_ids = [stopping[0], stopped[0], pending[0], running[0]]
-        self.project.terminate(instance_numbers=self._get_instance_numbers(instance_ids))
-        self._assert_post_action_multi_state('terminated', set(instance_ids) | set(terminated))
-
     def test_reboot(self):
         """Test reboot with multiple already existing instances having varied initial states"""
 
@@ -208,14 +192,6 @@ class TestWolphin(object):
         self._assert_post_action_multi_state('running',
                                              set(stopping) | set(stopped)
                                              | set(pending) | set(running))
-
-    def test_reboot_selective(self):
-        """Test rebooting selected instances"""
-
-        stopping, stopped, shutting_down, terminated, pending, running = self._multi_state_setup()
-        instance_ids = [stopping[0], stopped[0], pending[0], running[0]]
-        self.project.reboot(instance_numbers=self._get_instance_numbers(instance_ids))
-        self._assert_post_action_multi_state('running', set(instance_ids) | set(running))
 
     def test_revert(self):
         """Test revert with multiple already existing instances having varied initial states"""
@@ -235,27 +211,6 @@ class TestWolphin(object):
         eq_(len(base_set), running_count)
         eq_(len(base_set) + len(set(terminated) | set(shutting_down)), terminated_count)
         eq_(len(self.project.conn.INSTANCES), running_count + terminated_count)
-
-    def test_revert_selective(self):
-        """Test reverting selected instances"""
-
-        stopping, stopped, shutting_down, terminated, pending, running = self._multi_state_setup()
-        instance_ids = [stopping[0], stopped[0], pending[0], running[0]]
-        self.project.revert(instance_numbers=self._get_instance_numbers(instance_ids))
-        running_count = 0
-        terminated_count = 0
-        for k, v in self.project.conn.INSTANCES.iteritems():
-            if 'running' == v.state:
-                running_count += 1
-            elif 'terminated' == v.state:
-                terminated_count += 1
-        eq_(len(instance_ids) + len(running) - 1, running_count)
-        non_terminated_ids = set(stopping) | set(stopped) | set(pending) | set(running)
-        non_terminated_ids -= set(instance_ids)
-        for instance_id in non_terminated_ids:
-            ok_('terminated' != self.project.conn.INSTANCES[instance_id].state)
-        for instance_id in instance_ids:
-            eq_('terminated', self.project.conn.INSTANCES[instance_id].state)
 
     def test_status(self):
         """Test status """
@@ -285,35 +240,10 @@ class TestWolphin(object):
             for instance in result:
                 ok_(instance.state not in ['terminated', 'shutting-down'])
 
-    def test_get_healthy_selective_instances(self):
-        stopping, stopped, shutting_down, terminated, pending, running = self._multi_state_setup()
-
-        result = self.project.get_healthy_instances(instance_numbers=
-                                                    self._get_instance_numbers([
-                                                        stopping[0],
-                                                        stopped[0],
-                                                        pending[0],
-                                                        running[0]]))
-        ok_(0 < len(result))
-        for instance in result:
-            ok_(instance.state not in ['terminated', 'shutting-down'])
-
     def test_get_all_instances(self):
         result = self.project.get_all_instances()
         instance_ids = self.project.conn.INSTANCES.keys()
 
-        eq_(len(instance_ids), len(result))
-        for instance in result:
-            ok_(instance.id in instance_ids)
-
-    def test_get_instances(self):
-        self.project.create()
-        instance_suffix = 1
-        result = self.project.get_instances(instance_suffix)
-        instance_ids = []
-        for k, v in self.project.conn.INSTANCES.iteritems():
-            if '1' == v.tags['Name'].split(".")[-1]:
-                instance_ids.append(v.id)
         eq_(len(instance_ids), len(result))
         for instance in result:
             ok_(instance.id in instance_ids)

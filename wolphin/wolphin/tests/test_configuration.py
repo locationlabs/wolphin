@@ -8,17 +8,14 @@ from wolphin.project import WolphinProject
 class TestConfiguration(object):
     """Tests for Wolphin Configuration"""
 
-    def _assert_wolphin_error_raised(self, config, exception):
-        @raises(exception)
-        def _execute(config):
-            WolphinProject.new(config)
-        _execute(config)
+    @raises(InvalidWolphinConfiguration)
+    def _assert_wolphin_error_raised(self, config):
+        WolphinProject.new(config)
 
     @property
     def _config(self):
         config = Configuration(email='a@a.com')
-        for k, v in config.__dict__.iteritems():
-            setattr(config, k, v or "test")
+        config.update(**dict([k, v or "test"] for k, v in config.__dict__.iteritems()))
         return config
 
     def test_config_with_malformed_values(self):
@@ -29,8 +26,8 @@ class TestConfiguration(object):
                      dict(email='a')]:
             config = self._config
             for k, v in data.iteritems():
-                setattr(config, k, v)
-            yield self._assert_wolphin_error_raised, config, InvalidWolphinConfiguration
+                config.update(k=v)
+            yield self._assert_wolphin_error_raised, config
 
     def test_config_with_none_values(self):
 
@@ -41,12 +38,12 @@ class TestConfiguration(object):
             for k, v in configs[0].__dict__.iteritems():
                 if v:
                     new_config = self._config
-                    setattr(new_config, k, None)
+                    new_config.update(k=None)
                     configs.append(new_config)
             return configs
 
         for config in _generate_none_value_configs():
-            yield self._assert_wolphin_error_raised, config, InvalidWolphinConfiguration
+            yield self._assert_wolphin_error_raised, config
 
     def test_parser(self):
         lines = [

@@ -96,34 +96,6 @@ class Configuration(object):
 
         return config
 
-    @property
-    def ssh_key_file(self):
-        """returns the absolute location (with the filename) of the configured .pem file."""
-        return abspath(expanduser(join(self.pem_path, self.pem_file)))
-
-    def validate(self):
-        """Validates this configuration object"""
-
-        for k, v in self.__dict__.iteritems():
-            if not v:
-                raise InvalidWolphinConfiguration("{} is missing or None.".format(k))
-
-        # some basic email validation.
-        if not re.compile(".+@.+[.].+").match(self.email):
-            raise InvalidWolphinConfiguration("email: '{}' is not valid".format(self.email))
-
-        # min and max instance count validation.
-        if not 0 < int(self.min_instance_count) <= int(self.max_instance_count):
-            raise InvalidWolphinConfiguration("min_instance_count and max_instance_count should be"
-                                              " such that 0 < min_instance_count <="
-                                              " max_instance_count")
-
-        if not exists(self.ssh_key_file):
-            raise InvalidWolphinConfiguration(".pem file {} could not be found"
-                                              .format(self.ssh_key_file))
-
-        return True, None
-
     def parse_config_file(config, property_file):
         """
         Reads the ``property_file`` to extract properties and updates the ``config`` with them.
@@ -148,3 +120,33 @@ class Configuration(object):
                                   for l in lines if not l.startswith("#") and "=" in l))
         if property_file:
             config.__dict__.update(_as_dict(property_file))
+
+    @property
+    def ssh_key_file(self):
+        """returns the absolute location (with the filename) of the configured .pem file."""
+        return abspath(expanduser(join(self.pem_path, self.pem_file)))
+
+    def update(self, **kwargs):
+        for key, value in kwargs.iteritems():
+            setattr(self, key, value)
+
+    def validate(self):
+        """Validates this configuration object"""
+
+        for k, v in self.__dict__.iteritems():
+            if not v:
+                raise InvalidWolphinConfiguration("{} is missing or None.".format(k))
+
+        # some basic email validation.
+        if not re.compile(".+@.+[.].+").match(self.email):
+            raise InvalidWolphinConfiguration("email: '{}' is not valid".format(self.email))
+
+        # min and max instance count validation.
+        if not 0 < int(self.min_instance_count) <= int(self.max_instance_count):
+            raise InvalidWolphinConfiguration("min_instance_count and max_instance_count should be"
+                                              " such that 0 < min_instance_count <="
+                                              " max_instance_count")
+
+        if not exists(self.ssh_key_file):
+            raise InvalidWolphinConfiguration(".pem file {} could not be found"
+                                              .format(self.ssh_key_file))

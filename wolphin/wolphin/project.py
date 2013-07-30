@@ -6,11 +6,12 @@ from gusset.colortable import ColorTable
 
 from wolphin.attribute_dict import AttributeDict
 from wolphin.exceptions import EC2InstanceLimitExceeded, WolphinException
+from wolphin.selector import DefaultSelector
 
 
 class WolphinProject(object):
 
-    def __init__(self):
+    def __init__(self, selector=None):
         self.STATES = {
             'pending': 0,
             'running': 16,
@@ -20,8 +21,10 @@ class WolphinProject(object):
             'terminated': 48
         }
 
+        self.instance_selector = selector or DefaultSelector()
+
     @classmethod
-    def new(cls, config):
+    def new(cls, config, selector=None):
         """
         Factory method to create a new instance of WolphinProject.
 
@@ -30,7 +33,7 @@ class WolphinProject(object):
         """
 
         config.validate()
-        project = cls()
+        project = cls(selector=selector)
         project.config = config
         project.conn = connect_to_region(project.config.region,
                                          aws_access_key_id=project.config.aws_access_key_id,
@@ -44,10 +47,10 @@ class WolphinProject(object):
 
         print "Finding any existing reusable hosts .... "
         # now wait for the shutting-down and stopping instances to finish shutting down / stopping.
-        self._wait_for_shutting_down_instances()
-        self._wait_for_stopping_instances()
+        self._wait_for_shutting_down_instances(bypass_selector=True)
+        self._wait_for_stopping_instances(bypass_selector=True)
 
-        healthy = self.get_healthy_instances()
+        healthy = self.get_healthy_instances(bypass_selector=True)
 
         # see how many extra need to be requested or if any existing ones need to be terminated.
         already_present = len(healthy)
@@ -106,7 +109,7 @@ class WolphinProject(object):
                .format(len(self.get_instances_in_states([self.STATES['running']])),
                        self.config.project))
 
-        return self.status()
+        return self.status(bypass_selector=True)
 
     def _max_allocated_number(self):
         """Returns the maximum instance number allocated to this project's ec2 instances"""
@@ -114,12 +117,12 @@ class WolphinProject(object):
         return (max(0, *[self._get_instance_number(instance) for instance in instances])
                 if instances else 0)
 
-    def start(self, instance_numbers=None):
+    def start(self):
         """Start the appropriate ec2 instance(s) based on ``self.config``"""
 
         # wait for the stopping instances to finish stopping as they cannot be started if
         # they are in the middle of stopping.
-        self._wait_for_stopping_instances(instance_numbers=instance_numbers)
+        self._wait_for_stopping_instances()
 
         # start the instances that are not already running, pending to start, or stopping.
         instances = self.get_instances_in_states([self.STATES['shutting-down'],
@@ -127,21 +130,20 @@ class WolphinProject(object):
                                                   self.STATES['stopping'],
                                                   self.STATES['pending'],
                                                   self.STATES['running']],
-                                                 inverse_select=True,
-                                                 instance_numbers=instance_numbers)
+                                                 inverse_select=True)
         for instance in instances:
             instance.start()
 
         self._wait_for_starting_instances(instances=instances)
 
-        return self.status(instance_numbers=instance_numbers)
+        return self.status()
 
-    def stop(self, instance_numbers=None):
+    def stop(self):
         """Stop the appropriate ec2 instance(s)"""
 
         # wait for the starting instances to finish starting as they cannot be stopped if
         # they are in the middle of starting.
-        self._wait_for_starting_instances(instance_numbers=instance_numbers)
+        self._wait_for_starting_instances()
 
         # stop the instances that are not already stopping, stopped or pending.
         instances = self.get_instances_in_states([self.STATES['shutting-down'],
@@ -149,25 +151,24 @@ class WolphinProject(object):
                                                   self.STATES['pending'],
                                                   self.STATES['stopping'],
                                                   self.STATES['stopped']],
-                                                 inverse_select=True,
-                                                 instance_numbers=instance_numbers)
+                                                 inverse_select=True)
         for instance in instances:
             instance.stop()
 
         self._wait_for_stopping_instances(instances=instances)
 
-        return self.status(instance_numbers=instance_numbers)
+        return self.status()
 
-    def reboot(self, instance_numbers=None):
-        self.stop(instance_numbers=instance_numbers)
-        self.start(instance_numbers=instance_numbers)
-        return self.status(instance_numbers=instance_numbers)
+    def reboot(self):
+        self.stop()
+        self.start()
+        return self.status()
 
-    def revert(self, sequential=False, instance_numbers=None):
+    def revert(self, sequential=False):
         """Revert project instances"""
 
         print "Starting reverting ....",
-        instances = self.get_healthy_instances(instance_numbers=instance_numbers)
+        instances = self.get_healthy_instances()
         print len(instances), "instances ..",
         if instances and sequential:
             print "sequentially ...."
@@ -178,7 +179,7 @@ class WolphinProject(object):
             print "in a batch ...."
             self._revert(instances)
 
-        return self.status(instance_numbers=instance_numbers)
+        return self.status()
 
     def _revert(self, instances):
         """
@@ -191,7 +192,7 @@ class WolphinProject(object):
         """
 
         instance_numbers = [self._get_instance_number(instance) for instance in instances]
-        self.terminate(instance_numbers=instance_numbers)
+        self.terminate(instances=instances)
         print "Getting a new reservation ...."
         if instance_numbers:
             new_instances = self._reserve(len(instance_numbers), len(instance_numbers)).instances
@@ -202,11 +203,11 @@ class WolphinProject(object):
                 counter += 1
             self._wait_for_starting_instances(instances=new_instances)
 
-    def status(self, instances=None, instance_numbers=None):
+    def status(self, instances=None, bypass_selector=False):
         """Returns the statuses of requested wolphin project instances"""
         status_info = []
         if instances is None:
-            instances = self._select_instances(instance_numbers=instance_numbers)
+            instances = self._select_instances(bypass_selector=bypass_selector)
 
         if instances:
             for instance in instances:
@@ -228,17 +229,23 @@ class WolphinProject(object):
                                                  owner_email=instance.tags.get("OwnerEmail")))
         return status_info
 
-    def terminate(self, instance_numbers=None):
-        """Terminate instances"""
-        instances = self.get_healthy_instances(instance_numbers=instance_numbers)
-        for instance in instances:
+    def terminate(self, instances=None, force=False):
+        """
+        Terminate instances
+
+        :param instances: a list of instances to terminate.
+        :param force: if True, terminates all instances irrespective of any selectors applied.
+
+        """
+        instances_to_terminate = instances or self.get_healthy_instances(bypass_selector=force)
+        for instance in instances_to_terminate:
             instance.terminate()
 
-        self._wait_for_shutting_down_instances(instances)
+        self._wait_for_shutting_down_instances(instances_to_terminate)
 
-        return self.status(instance_numbers=instance_numbers)
+        return self.status(instances=instances_to_terminate)
 
-    def get_healthy_instances(self, instance_numbers=None):
+    def get_healthy_instances(self, bypass_selector=False):
         """
         Returns instances that are not terminated and not going towards termination (shutting-down).
         """
@@ -246,27 +253,17 @@ class WolphinProject(object):
         return self.get_instances_in_states([self.STATES['terminated'],
                                              self.STATES['shutting-down']],
                                             inverse_select=True,
-                                            instance_numbers=instance_numbers)
+                                            bypass_selector=bypass_selector)
 
-    def get_instances_in_states(self, state_codes, inverse_select=False, instance_numbers=None):
+    def get_instances_in_states(self, state_codes, inverse_select=False, bypass_selector=False):
         """Returns project instances that are in the given ``state_codes``"""
 
         not_in_state = lambda instance: instance.state_code not in state_codes
         in_state = lambda instance: instance.state_code in state_codes
         filter_function = not_in_state if inverse_select else in_state
-        instances = self._select_instances(instance_numbers=instance_numbers)
+        instances = self._select_instances(bypass_selector=bypass_selector)
 
         return filter(filter_function, instances)
-
-    def get_instances(self, instance_name_suffix):
-        """Gets the ec2 instance(s) by its wolphin project instance name"""
-
-        reservations = self.conn.get_all_instances(filters={"tag:Name":
-                                                            "wolphin.{}.{}"
-                                                            .format(self.config.project,
-                                                                    instance_name_suffix)})
-
-        return self._get_instances_from_reservations(reservations)
 
     def get_all_instances(self):
         """Get all instances for a wolphin project on ec2"""
@@ -277,21 +274,16 @@ class WolphinProject(object):
 
         return self._get_instances_from_reservations(reservations)
 
-    def _get_instance_suffix(self, instance):
-        """Returns the instance suffix for the ``instance``"""
-
-        return str((instance).tags.get("Name")).split(".")[-1]
-
     def _get_instance_number(self, instance):
         """Parses the instance name to get the instance number"""
 
-        suffix = self._get_instance_suffix(instance)
-        return int(suffix.split("_")[0])
+        return int(str((instance).tags.get("Name")).split(".")[-1])
 
     def _get_instances_from_reservations(self, reservations):
         """Flatten all reservations to get one instances list"""
 
-        instances = [instance for reservation in reservations or []
+        instances = [instance
+                     for reservation in reservations or []
                      for instance in reservation.instances]
 
         for instance in instances:
@@ -329,13 +321,11 @@ class WolphinProject(object):
                 raise WolphinException(str(ec2_error))
         return reservation
 
-    def _select_instances(self, instance_numbers=None):
+    def _select_instances(self, bypass_selector=False):
         """Gets the instances based on self.config"""
 
-        # get the list of instances if only a specific host's status is needed else get all.
-        return ([instance for number in instance_numbers
-                 for instance in self.get_instances(number) or []]
-                if instance_numbers else self.get_all_instances())
+        all_instances = self.get_all_instances()
+        return all_instances if bypass_selector else self.instance_selector.select(all_instances)
 
     def _tag_instance(self, instance, suffix):
         """
@@ -378,6 +368,7 @@ class WolphinProject(object):
                 if ((state_code is not None and instance.state_code == state_code) or
                         (new_state_code is not None and instance.state_code != new_state_code)):
                     keep_waiting = True
+
             print color_table
             if not keep_waiting:
                 break
@@ -388,27 +379,26 @@ class WolphinProject(object):
 
         return instances
 
-    def _wait_for_starting_instances(self, instances=None, instance_numbers=None):
+    def _wait_for_starting_instances(self, instances=None):
         print "Waiting for pending instances to start ...."
         self._wait_for_transition(instances or
-                                  self.get_instances_in_states([self.STATES['pending']],
-                                                               instance_numbers=instance_numbers),
+                                  self.get_instances_in_states([self.STATES['pending']]),
                                   state_code=self.STATES['pending'],
                                   new_state_code=self.STATES['running'])
 
-    def _wait_for_shutting_down_instances(self, instances=None, instance_numbers=None):
+    def _wait_for_shutting_down_instances(self, instances=None, bypass_selector=False):
         print "Waiting for shutting-down instances to terminate ...."
         self._wait_for_transition(instances or
                                   self.get_instances_in_states([self.STATES['shutting-down']],
-                                                               instance_numbers=instance_numbers),
+                                                               bypass_selector=bypass_selector),
                                   state_code=self.STATES['shutting-down'],
                                   new_state_code=self.STATES['terminated'])
 
-    def _wait_for_stopping_instances(self, instances=None, instance_numbers=None):
+    def _wait_for_stopping_instances(self, instances=None, bypass_selector=False):
         print "Waiting for stopping instances to stop ...."
         self._wait_for_transition(instances or
                                   self.get_instances_in_states([self.STATES['stopping']],
-                                                               instance_numbers=instance_numbers),
+                                                               bypass_selector=bypass_selector),
                                   state_code=self.STATES['stopping'],
                                   new_state_code=self.STATES['stopped'])
 
