@@ -32,6 +32,6 @@ class InstanceNumberBasedSelector(Selector):
 
     def select(self, instances):
         return ([instance
-                for instance in instances or []
-                if int(str((instance).tags.get("Name")).split(".")[-1]) in self.instance_numbers]
+                 for instance in instances or []
+                 if int(str((instance).tags.get("Name")).split(".")[-1]) in self.instance_numbers]
                 if self.instance_numbers else instances)

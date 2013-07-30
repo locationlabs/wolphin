@@ -8,7 +8,7 @@ class TestInstanceNumberBasedSelector(object):
 
     def setUp(self):
 
-        self.instances = [Instance("a", "a", ["a"], "a", "a") for _ in range(10)]
+        self.instances = [Instance("tst", "tst", ["tst"], "tst", "tst") for _ in range(10)]
         tag_number = 1
         for instance in self.instances:
             instance.tags['Name'] = "test.{}".format(tag_number)
