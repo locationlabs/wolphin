@@ -1,5 +1,4 @@
 import re
-import logging
 
 from os.path import expanduser, abspath, exists, join
 
@@ -22,8 +21,6 @@ class Configuration(object):
     DEFAULT_MAX_WAIT_TRIES = 12
     DEFAULT_MAX_WAIT_DURATION = 10
 
-    DEFAULT_LOGGING_LEVEL = 'INFO'
-
     def __init__(self,
                  project=None,
                  email=None,
@@ -41,8 +38,7 @@ class Configuration(object):
                  aws_access_key_id=None,
                  aws_secret_key=None,
                  max_wait_tries=DEFAULT_MAX_WAIT_TRIES,
-                 max_wait_duration=DEFAULT_MAX_WAIT_DURATION,
-                 logging_level=DEFAULT_LOGGING_LEVEL):
+                 max_wait_duration=DEFAULT_MAX_WAIT_DURATION):
         """
         Initialize a wolphin configuration from defaults and any provided parameters.
 
@@ -86,7 +82,6 @@ class Configuration(object):
         self.aws_secret_key = aws_secret_key
         self.max_wait_tries = max_wait_tries
         self.max_wait_duration = max_wait_duration
-        self.logging_level = logging_level
 
     @classmethod
     def create(cls, *config_files):
@@ -163,9 +158,3 @@ class Configuration(object):
         if not exists(self.ssh_key_file):
             raise InvalidWolphinConfiguration(".pem file {} could not be found."
                                               .format(self.ssh_key_file))
-
-        # logging level.
-        numeric_level = getattr(logging, self.logging_level.upper(), None)
-        if not isinstance(numeric_level, int):
-            raise InvalidWolphinConfiguration("logging level: {} is not valid."
-                                              .format(self.logging_level))

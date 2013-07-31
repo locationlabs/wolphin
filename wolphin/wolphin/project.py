@@ -35,7 +35,7 @@ class WolphinProject(object):
         config.validate()
         project = cls()
         project.config = config
-        project._configure_logging()
+        project.logger = logging.getLogger('wolphin.{}'.format(config.project))
         project._connect_to_ec2()
 
         return project
@@ -44,11 +44,6 @@ class WolphinProject(object):
         self.conn = connect_to_region(self.config.region,
                                       aws_access_key_id=self.config.aws_access_key_id,
                                       aws_secret_access_key=self.config.aws_secret_key)
-
-    def _configure_logging(self):
-        logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        self.logger = logging.getLogger('wolphin.{}'.format(self.config.project))
-        self.logger.setLevel(getattr(logging, self.config.logging_level.upper()))
 
     def create(self):
         """

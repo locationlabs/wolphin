@@ -2,6 +2,7 @@
 """Example script that uses wolphin"""
 
 import argparse
+import logging
 import sys
 
 from fabric.api import run
@@ -62,17 +63,15 @@ def controller():
 
     parser.add_argument("--log",
                         dest="logging_level",
-                        default=Configuration.DEFAULT_LOGGING_LEVEL,
+                        default='INFO',
                         help="Set the logging level, e.g. '--log DEBUG' to set the level to DEBUG.")
 
     args, extra = parser.parse_known_args()
 
-    config = Configuration.create(*args.config_files)
-    config.email = args.email or config.email
-    config.project = args.project or config.project
-    config.logging_level = args.logging_level
+    project = _make_project(args)
+
+    # get selector
     selector = InstanceNumberBasedSelector(instance_numbers=args.project_instances)
-    project = WolphinProject.new(config)
 
     try:
         if args.command == "status":
@@ -99,6 +98,33 @@ def controller():
     except WolphinException as ex:
         print ex
         sys.exit(1)
+
+
+def _make_project(args):
+    # make config
+    config = _make_config(args)
+
+    # configure logging
+    _configure_logging(args, config)
+
+    # make a new project
+    project = WolphinProject.new(config)
+
+    return project
+
+
+def _make_config(args):
+    config = Configuration.create(*args.config_files)
+    config.email = args.email or config.email
+    config.project = args.project or config.project
+    return config
+
+
+def _configure_logging(args, config):
+    logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger('wolphin.{}'.format(config.project))
+    logger.setLevel(getattr(logging, args.logging_level.upper()))
+
 
 if __name__ == '__main__':
     controller()
