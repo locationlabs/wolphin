@@ -11,7 +11,7 @@ class TestInstanceNumberBasedSelector(object):
         self.instances = [Instance("tst", "tst", ["tst"], "tst", "tst") for _ in range(10)]
 
         for tag_number, instance in enumerate(self.instances):
-            instance.tags['Name'] = "test.{}".format(tag_number)
+            instance.tags['Name'] = "test.{}".format(tag_number + 1)
 
     def _assert_instance_number_based_selector_works(self, instance_numbers):
 
