@@ -133,7 +133,7 @@ also be explored but its not in the works for now.
 
 ### wolphin_project generator
 
-Wolphin also provides a generator that can be used to iterate over the ec2 instances associated with
+Wolphin also provides a generator that can be used to iterate over any **RUNNING** ec2 instances associated with
 any project. A typical usage scenario would be to use this generator to execute fabric tasks on various
 ec2 instances:
 
