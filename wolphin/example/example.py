@@ -91,7 +91,7 @@ def controller():
         elif args.command == "terminate":
             status_info = project.terminate(selector=selector)
         elif args.command == "revert":
-            status_info = project.revert(sequential=args.sequential)
+            status_info = project.revert(sequential=args.sequential, selector=selector)
 
         if args.command != "info":
             print_status(status_info)
