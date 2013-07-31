@@ -160,43 +160,36 @@ ec2 instances:
 ### Selector
 
 All operations **with the exception of create** can also be performed on a single or only selected
- instances under a project than the project as a whole. this can be done using a selector, e.g.,
- modifying the example above:
-
-    from fabric.api import run
+ instances under a project than the project as a whole. this can be done using a selector, e.g.:
 
     from wolphin.project import WolphinProject
     from wolphin.config import Configuration
     from wolphin.selector import InstanceNumberBasedSelector
-    from wolphin.generator import wolphin_project
 
+
+    project = WolphinProject.new(Configuration())
+
+    # create instances under the project.
+    project.create()
 
     # only select instances numbered 1 and 2 for any operations. For instance,
     # if the name of the project were 'project', this selector will only select
     # instances named 'wolphin.project.2' and 'wolphin.project.1'.
     custom_selector = InstanceNumberBasedSelector(instance_numbers=[1, 2])
 
-    project = WolphinProject.new(Configuration(), selector=custom_selector)
+    project.stop(selector=custom_selector)
 
-    # create instances under the project.
-    # the create operation is not affected by the selector.
-    project.create()
+ would only stop instances ``wolphin.project.2`` and ``wolphin.project.1``.
 
-    # run a fabric task on the project. Since the selector for instances
-    # 1 and 2 is in effect, the task(s) will be run only on those instances.
-    for _ in wolphin_project(project):
+ The ``wolphin_project`` generator can also be used in a similar fashion:
+
+    for _ in wolphin_project(project, selector=custom_selector):
         run("uname -a")
 
-    # terminate the project(all its instances by setting force=True),
-    # if force is not set, the instance selector will be applied while termination
-    # as well and only the instances selcted by the selector will be terminated.
-    project.terminate(force=True)
+ to do ``run("uname -a")`` on instances ``wolphin.project.2`` and ``wolphin.project.1`` only.
 
-Once the selector is applied operations will work in the context of the selector e.g. ``project.start()``
- would only start instances ``wolphin.project.2`` and ``wolphin.project.1`` if the selector as in the
- example above, is applied.
 
-The user is free to define his/her own selector by overriding the default selector.
+The user is free to define his/her own selector.
 This can be done by extending the ``wolphin.selector.Selector`` abstract class and overriding its
  ``select`` function. This new class can then be used with a Wolphin project, e.g.:
 
@@ -206,7 +199,9 @@ This can be done by extending the ``wolphin.selector.Selector`` abstract class a
             ....
             ....
 
-    project = WolphinProject.new(Configuration(), selector=MySelector())
+    project = WolphinProject.new(....)
+
+    project.revert(selector=MySelector())
 
 ### Example Script
 

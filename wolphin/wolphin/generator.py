@@ -3,10 +3,10 @@ from fabric.api import settings
 from wolphin.exceptions import NoRunningInstances
 
 
-def wolphin_project(project, instance_numbers=None):
+def wolphin_project(project, selector=None):
 
     running_hosts = project.get_instances_in_states([project.STATES['running']],
-                                                    instance_numbers=instance_numbers)
+                                                    selector=selector)
     if not running_hosts:
         raise NoRunningInstances("project: {}".format(project.config.project))
 

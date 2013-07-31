@@ -1,4 +1,6 @@
 import re
+import logging
+
 from os.path import expanduser, abspath, exists, join
 
 from wolphin.exceptions import InvalidWolphinConfiguration
@@ -20,6 +22,8 @@ class Configuration(object):
     DEFAULT_MAX_WAIT_TRIES = 12
     DEFAULT_MAX_WAIT_DURATION = 10
 
+    DEFAULT_LOGGING_LEVEL = 'INFO'
+
     def __init__(self,
                  project=None,
                  email=None,
@@ -37,7 +41,8 @@ class Configuration(object):
                  aws_access_key_id=None,
                  aws_secret_key=None,
                  max_wait_tries=DEFAULT_MAX_WAIT_TRIES,
-                 max_wait_duration=DEFAULT_MAX_WAIT_DURATION):
+                 max_wait_duration=DEFAULT_MAX_WAIT_DURATION,
+                 logging_level=DEFAULT_LOGGING_LEVEL):
         """
         Initialize a wolphin configuration from defaults and any provided parameters.
 
@@ -81,6 +86,7 @@ class Configuration(object):
         self.aws_secret_key = aws_secret_key
         self.max_wait_tries = max_wait_tries
         self.max_wait_duration = max_wait_duration
+        self.logging_level = logging_level
 
     @classmethod
     def create(cls, *config_files):
@@ -96,7 +102,7 @@ class Configuration(object):
 
         return config
 
-    def parse_config_file(config, property_file):
+    def parse_config_file(self, property_file):
         """
         Reads the ``property_file`` to extract properties and updates the ``config`` with them.
 
@@ -107,7 +113,6 @@ class Configuration(object):
         comments should be on a separate line and not as a continuation of the property, e.g.:
             k = v # comment  - is not considered valid.
 
-        :param config: the config object to be updated with the values from the property_file.
         :param property_file: the file containing the properties to overrife the ``config`` with.
         """
 
@@ -119,7 +124,14 @@ class Configuration(object):
         _as_dict = lambda lines: (dict(map(lambda x: _unquote(x.strip()), l.split('='))
                                   for l in lines if not l.startswith("#") and "=" in l))
         if property_file:
-            config.__dict__.update(_as_dict(property_file))
+            self.__dict__.update(_as_dict(property_file))
+
+        # convert the values that must be numeric from string to int.
+        for integer_attribute in ['min_instance_count',
+                                  'max_instance_count',
+                                  'max_wait_tries',
+                                  'max_wait_duration']:
+            setattr(self, integer_attribute, int(getattr(self, integer_attribute)))
 
     @property
     def ssh_key_file(self):
@@ -139,14 +151,21 @@ class Configuration(object):
 
         # some basic email validation.
         if not re.compile(".+@.+[.].+").match(self.email):
-            raise InvalidWolphinConfiguration("email: '{}' is not valid".format(self.email))
+            raise InvalidWolphinConfiguration("email: '{}' is not valid.".format(self.email))
 
         # min and max instance count validation.
-        if not 0 < int(self.min_instance_count) <= int(self.max_instance_count):
+        if not 0 < self.min_instance_count <= self.max_instance_count:
             raise InvalidWolphinConfiguration("min_instance_count and max_instance_count should be"
                                               " such that 0 < min_instance_count <="
-                                              " max_instance_count")
+                                              " max_instance_count.")
 
+        # is the .pem available?
         if not exists(self.ssh_key_file):
-            raise InvalidWolphinConfiguration(".pem file {} could not be found"
+            raise InvalidWolphinConfiguration(".pem file {} could not be found."
                                               .format(self.ssh_key_file))
+
+        # logging level.
+        numeric_level = getattr(logging, self.logging_level.upper(), None)
+        if not isinstance(numeric_level, int):
+            raise InvalidWolphinConfiguration("logging level: {} is not valid."
+                                              .format(self.logging_level))

@@ -60,30 +60,36 @@ def controller():
                              "a batch. Use this option if there is a risk of running of available "
                              " instances on ec2 if relinquished in bulk.")
 
+    parser.add_argument("--log",
+                        dest="logging_level",
+                        default=Configuration.DEFAULT_LOGGING_LEVEL,
+                        help="Set the logging level, e.g. '--log DEBUG' to set the level to DEBUG.")
+
     args, extra = parser.parse_known_args()
 
     config = Configuration.create(*args.config_files)
     config.email = args.email or config.email
     config.project = args.project or config.project
+    config.logging_level = args.logging_level
     selector = InstanceNumberBasedSelector(instance_numbers=args.project_instances)
-    project = WolphinProject.new(config, selector=selector)
+    project = WolphinProject.new(config)
 
     try:
         if args.command == "status":
-            status_info = project.status()
+            status_info = project.status(selector=selector)
         elif args.command == "create":
             status_info = project.create()
         elif args.command == "info":
-            for _ in wolphin_project(project):
+            for _ in wolphin_project(project, selector=selector):
                 run("uname -a; users")
         elif args.command == "start":
-            status_info = project.start()
+            status_info = project.start(selector=selector)
         elif args.command == "stop":
-            status_info = project.stop()
+            status_info = project.stop(selector=selector)
         elif args.command == "reboot":
-            status_info = project.reboot()
+            status_info = project.reboot(selector=selector)
         elif args.command == "terminate":
-            status_info = project.terminate()
+            status_info = project.terminate(selector=selector)
         elif args.command == "revert":
             status_info = project.revert(sequential=args.sequential)
 

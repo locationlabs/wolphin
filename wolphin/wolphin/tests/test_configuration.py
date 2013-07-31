@@ -25,8 +25,7 @@ class TestConfiguration(object):
                      dict(min_instance_count='1', max_instance_count='0'),
                      dict(email='a')]:
             config = self._config
-            for k, v in data.iteritems():
-                config.update(k=v)
+            config.update(**data)
             yield self._assert_wolphin_error_raised, config
 
     def test_config_with_none_values(self):
@@ -38,7 +37,7 @@ class TestConfiguration(object):
             for k, v in configs[0].__dict__.iteritems():
                 if v:
                     new_config = self._config
-                    new_config.update(k=None)
+                    new_config.__dict__[k] = None
                     configs.append(new_config)
             return configs
 
