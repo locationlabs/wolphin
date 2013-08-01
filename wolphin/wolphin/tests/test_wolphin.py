@@ -235,13 +235,13 @@ class TestWolphin(object):
                 self._multi_state_setup()
             else:
                 self.project.create()
-            result = self.project.get_healthy_instances()
+            result = self.project._get_healthy_instances()
             ok_(0 < len(result))
             for instance in result:
                 ok_(instance.state not in ['terminated', 'shutting-down'])
 
     def test_get_all_instances(self):
-        result = self.project.get_all_instances()
+        result = self.project._get_all_instances()
         instance_ids = self.project.conn.INSTANCES.keys()
 
         eq_(len(instance_ids), len(result))
