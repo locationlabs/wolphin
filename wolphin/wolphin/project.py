@@ -140,7 +140,7 @@ class WolphinProject(object):
 
         self._wait_for_starting_instances(instances=instances)
         self.logger.info("Finished starting.")
-        return self.status(selector=selector)
+        return self.status(selector)
 
     def stop(self, selector=None):
         """Stop the appropriate ec2 instance(s)"""
@@ -162,18 +162,18 @@ class WolphinProject(object):
 
         self._wait_for_stopping_instances(instances=instances)
         self.logger.info("Finished stopping.")
-        return self.status(selector=selector)
+        return self.status(selector)
 
     def reboot(self, selector=None):
-        self.stop(selector=selector)
-        self.start(selector=selector)
+        self.stop(selector)
+        self.start(selector)
         self.logger.info("Finished rebooting.")
-        return self.status(selector=selector)
+        return self.status(selector)
 
     def revert(self, sequential=False, selector=None):
         """Revert project instances"""
 
-        instances = self._get_healthy_instances(selector=selector)
+        instances = self._get_healthy_instances(selector)
         self.logger.info("Starting reverting {} instances ....".format(len(instances)))
 
         if instances and sequential:
@@ -186,7 +186,7 @@ class WolphinProject(object):
             self._revert(instances)
 
         self.logger.info("Finished reverting.")
-        return self.status(selector=selector)
+        return self.status(selector)
 
     def _revert(self, instances):
         """
@@ -242,13 +242,13 @@ class WolphinProject(object):
         :param force: if True, terminates all instances irrespective of any selectors applied.
 
         """
-        instances_to_terminate = instances or self._get_healthy_instances(selector=selector)
+        instances_to_terminate = instances or self._get_healthy_instances(selector)
         for instance in instances_to_terminate:
             instance.terminate()
 
         self._wait_for_shutting_down_instances(instances_to_terminate)
         self.logger.info("Finished terminating.")
-        return self.status(selector=selector)
+        return self.status(selector)
 
     def get_instances_in_states(self, state_codes, inverse_select=False, selector=None):
         """Returns project instances that are in the given ``state_codes``"""
@@ -256,7 +256,7 @@ class WolphinProject(object):
         not_in_state = lambda instance: instance.state_code not in state_codes
         in_state = lambda instance: instance.state_code in state_codes
         filter_function = not_in_state if inverse_select else in_state
-        instances = self._select_instances(selector=selector)
+        instances = self._select_instances(selector)
 
         return filter(filter_function, instances)
 
