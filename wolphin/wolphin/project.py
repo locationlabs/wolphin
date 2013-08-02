@@ -71,13 +71,19 @@ class WolphinProject(object):
         # terminate some existing ones if they are extra.
         already_present = len(healthy)
         max_number_needed = self.config.max_instance_count - already_present
+        new_instances = []
         if max_number_needed < 0:
             self.logger.info("Terminating extra instances ....")
-            self.terminate(instances=healthy[:abs(max_number_needed)])
-            healthy = healthy[abs(max_number_needed):]
+            self.terminate(instances=healthy[max_number_needed:])
+            healthy = healthy[:max_number_needed]
         elif max_number_needed > 0:
+            # reserve new instances.
             # boto requires minimum number of instances requested to be 1
             min_number_needed = max(1, self.config.min_instance_count - already_present)
+
+            self.logger.info("More needed from Amazon: between {} and {} instances"
+                             .format(min_number_needed, max_number_needed))
+            new_instances = self._create_extra_instances(min_number_needed, max_number_needed)
 
         # restart the healthy instances.
         for instance in healthy:
@@ -86,14 +92,9 @@ class WolphinProject(object):
             except EC2ResponseError:
                 instance.start()
 
-        # create new instances if needed.
-        if max_number_needed > 0:
-            # reserve new instances if needed.
-            self.logger.info("More needed from Amazon: between {} and {} instances"
-                             .format(min_number_needed, max_number_needed))
-            self._create_extra_instances(healthy, min_number_needed, max_number_needed)
+        healthy.extend(new_instances)
 
-    def _create_extra_instances(self, healthy, min_number_needed, max_number_needed):
+    def _create_extra_instances(self, min_number_needed, max_number_needed):
 
         # get the max instance number to start tagging with. Do this before requesting instances
         # so that there is no lag between reservation and tagging.
@@ -104,14 +105,14 @@ class WolphinProject(object):
 
         reservation = self._reserve(min_number_needed, max_number_needed)
         provided = len(reservation.instances)
-        self.logger.debug("{} instances provided by Amazon, total being prepared: {}"
-                          .format(provided, provided + len(healthy)))
+        self.logger.debug("{} instances provided by Amazon".format(provided))
 
+        instances = reservation.instances or []
         # Tagging instances with the project name.
-        for instance in reservation.instances:
-            instance_allocation_number += 1
-            self._tag_instance(instance, instance_allocation_number)
-            healthy.append(instance)
+        for tag_number, instance in enumerate(instances,
+                                              start=instance_allocation_number + 1):
+            self._tag_instance(instance, tag_number)
+        return instances
 
     def _max_allocated_number(self):
         """Returns the maximum instance number allocated to this project's ec2 instances"""
