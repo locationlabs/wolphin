@@ -39,7 +39,7 @@ class InvalidWolphinConfiguration(WolphinException):
     pass
 
 
-class NotSSHReadyError(WolphinException):
+class SSHTimeoutError(WolphinException):
     """
     Raised when all of a project's instances could not be made ssh-ready.
     """

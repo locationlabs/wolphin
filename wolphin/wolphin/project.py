@@ -8,7 +8,7 @@ from fabric.api import hide, run, settings
 from gusset.colortable import ColorTable
 
 from wolphin.attribute_dict import AttributeDict
-from wolphin.exceptions import EC2InstanceLimitExceeded, NotSSHReadyError, WolphinException
+from wolphin.exceptions import EC2InstanceLimitExceeded, SSHTimeoutError, WolphinException
 from wolphin.selector import DefaultSelector
 
 
@@ -407,62 +407,73 @@ class WolphinProject(object):
 
     def _wait_for_ssh(self, instances):
         """
-        Waits till the ``instances`` are ssh-ready.
+        Waits until the ``instances`` are ssh-ready.
         """
-
-        def _check_if_ssh_ready(host_string, username, ssh_key_file):
-            if not host_string:
-                # if the host is not ready yet, it may not even have a host string
-                # which would mean definitely not ready for ssh yet.
-                return False
-            try:
-                with settings(hide('everything'),
-                              host_string=host_string,
-                              user=username,
-                              key_filename=ssh_key_file):
-                    run("hostname")
-            except:
-                return False
-            return True
-
-        max_tries = self.config.max_wait_tries
-        refresh_rate = self.config.max_wait_duration
 
         if not instances:
             return
-        for attempt in range(max_tries):
-            instance_count = len(instances)
+        instance_count = len(instances)
+        for attempt in range(self.config.max_wait_tries):
             self.logger.debug("Waiting for {} instances to be ssh ready"
-                              "(refreshed every {} secs., max {} secs.)"
+                              "(refreshed every {} secs., max {} times.)"
                               .format(instance_count,
-                                      refresh_rate,
-                                      max_tries * refresh_rate))
+                                      self.config.max_wait_duration,
+                                      self.config.max_wait_tries))
 
-            keep_waiting = False
-            color_table = ColorTable('instance', 'ssh_ready')
-            for instance in instances:
-                instance.update()
-                is_ssh_ready = _check_if_ssh_ready(instance.ip_address,
-                                                   self.config.user,
-                                                   self.config.ssh_key_file)
-                keep_waiting = keep_waiting or not is_ssh_ready
+            all_ready, status_table = self._check_instances_for_ssh(instances)
 
-                color_table.add(instance="{}|{}".format(instance.id, instance.tags.get("Name")),
-                                ssh_ready=str(is_ssh_ready))
+            self.logger.debug("\n{}".format(status_table))
 
-            self.logger.debug("\n{}".format(color_table))
-            if not keep_waiting:
+            if all_ready:
                 break
-            if attempt == max_tries - 1:
-                error_message = ("Timed out when waiting for some or all instances of project:"
-                                 "{} to be ssh-ready."
-                                 .format(self.config.project))
-                self.logger.warning(error_message)
-                raise NotSSHReadyError(error_message)
-            else:
-                sleep(refresh_rate)
+
+            sleep(self.config.max_wait_duration)
+
+        else:
+            error_message = ("Timed out when waiting for some or all instances of project:"
+                             "{} to be ssh-ready."
+                             .format(self.config.project))
+            self.logger.error(error_message)
+            raise SSHTimeoutError(error_message)
 
         return instances
+
+    def _check_instances_for_ssh(self, instances):
+        """
+        Checks if the ``instances`` are ssh-ready; returns True if they are, False otherwise,
+        along with the statuses of all of them.
+        """
+
+        not_ready = False
+        status_table = ColorTable('instance', 'ssh_ready')
+        for instance in instances:
+            instance.update()
+            instance_is_ssh_ready = self._check_if_ssh_ready(instance)
+            not_ready = not_ready or not instance_is_ssh_ready
+
+            status_table.add(instance="{}|{}".format(instance.id, instance.tags.get("Name")),
+                             ssh_ready=str(instance_is_ssh_ready))
+        return not not_ready, status_table
+
+    def _check_if_ssh_ready(self, instance):
+        """
+        Tries to ssh into an ``instance`` using the project's config; returns True if it was
+        successful, False otherwise.
+        """
+
+        if not instance.ip_address:
+            # if the host is not ready yet, it may not even have a host string
+            # which would mean it is definitely not ready for ssh yet.
+            return False
+        try:
+            with settings(hide('everything'),
+                          host_string=instance.ip_address,
+                          user=self.config.user,
+                          key_filename=self.config.ssh_key_file):
+                run("hostname")
+        except:
+            return False
+        return True
 
     def _wait_for_starting_instances(self, instances=None, selector=None):
         self.logger.info("Waiting for pending instances to start ....")
