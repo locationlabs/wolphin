@@ -397,7 +397,7 @@ class WolphinProject(object):
 
     def _check_instances_for_transition(self, instances, state_code, new_state_code):
         """
-        Checks if the ``instances`` have transitions out of the ``state_code`` to the
+        Checks if the ``instances`` have transitioned out of the ``state_code`` to the
         ``new_state_code`` and returns True if all of them have, False otherwise along with the
         statuses of all of them.
         """
