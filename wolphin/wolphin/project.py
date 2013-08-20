@@ -368,42 +368,51 @@ class WolphinProject(object):
         if ``new_code is set, then waits till all the ``instances`` get to the ``new_state_code``.
         """
 
-        max_tries = self.config.max_wait_tries
-        refresh_rate = self.config.max_wait_duration
-
         if not instances:
             return
-        for attempt in range(max_tries):
-            instance_count = len(instances)
-            self.logger.debug("Waiting for {} instances to go from {} to {} "
-                              "(refreshed every {} secs., max {} secs.)"
-                              .format(instance_count,
-                                      _inverse_lookup(self.STATES, state_code),
-                                      _inverse_lookup(self.STATES, new_state_code),
-                                      refresh_rate,
-                                      max_tries * refresh_rate))
-
-            keep_waiting = False
-            color_table = ColorTable('instance', 'state')
-            for instance in instances:
-                instance.update()
-                color_table.add(instance="{}|{}".format(instance.id, instance.tags.get("Name")),
-                                state="{}|{}".format(instance.state_code, instance.state))
-
-                if ((state_code is not None and instance.state_code == state_code) or
-                        (new_state_code is not None and instance.state_code != new_state_code)):
-                    keep_waiting = True
-
-            self.logger.debug("\n{}".format(color_table))
-            if not keep_waiting:
+        for _ in range(self.config.max_wait_tries):
+            if self._all_instances_have_transitioned(instances, state_code, new_state_code):
                 break
-            if attempt == max_tries - 1:
-                self.logger.warning("!! Max amount of wait reached, "
-                                    "will not wait anymore, continuing ....")
-            else:
-                sleep(refresh_rate)
+            sleep(self.config.max_wait_duration)
+        else:
+            self.logger.warning("Timed out while waiting for instances' state transition, "
+                                "will not wait anymore, continuing ....")
 
         return instances
+
+    def _all_instances_have_transitioned(self, instances, state_code, new_state_code):
+        self.logger.debug("Waiting for {} instances to go from {} to {} "
+                          "(refreshed every {} secs., max {} secs.)"
+                          .format(len(instances),
+                                  _inverse_lookup(self.STATES, state_code),
+                                  _inverse_lookup(self.STATES, new_state_code),
+                                  self.config.max_wait_duration,
+                                  self.config.max_wait_tries * self.config.max_wait_duration))
+
+        all_instances_ready, status_table = self._check_instances_for_transition(instances,
+                                                                                 state_code,
+                                                                                 new_state_code)
+        self.logger.debug("\n{}".format(status_table))
+        return all_instances_ready
+
+    def _check_instances_for_transition(self, instances, state_code, new_state_code):
+        """
+        Checks if the ``instances`` have transitions out of the ``state_code`` to the
+        ``new_state_code`` and returns True if all of them have, False otherwise along with the
+        statuses of all of them.
+        """
+
+        keep_waiting = False
+        status_table = ColorTable('instance', 'state')
+        for instance in instances:
+            instance.update()
+            status_table.add(instance="{}|{}".format(instance.id, instance.tags.get("Name")),
+                             state="{}|{}".format(instance.state_code, instance.state))
+
+            if ((state_code is not None and instance.state_code == state_code) or
+                    (new_state_code is not None and instance.state_code != new_state_code)):
+                keep_waiting = True
+        return not keep_waiting, status_table
 
     def _wait_for_ssh(self, instances):
         """
@@ -412,23 +421,10 @@ class WolphinProject(object):
 
         if not instances:
             return
-        instance_count = len(instances)
-        for attempt in range(self.config.max_wait_tries):
-            self.logger.debug("Waiting for {} instances to be ssh ready"
-                              "(refreshed every {} secs., max {} times.)"
-                              .format(instance_count,
-                                      self.config.max_wait_duration,
-                                      self.config.max_wait_tries))
-
-            all_ready, status_table = self._check_instances_for_ssh(instances)
-
-            self.logger.debug("\n{}".format(status_table))
-
-            if all_ready:
+        for _ in range(self.config.max_wait_tries):
+            if self._all_instances_ssh_ready(instances):
                 break
-
             sleep(self.config.max_wait_duration)
-
         else:
             error_message = ("Timed out when waiting for some or all instances of project:"
                              "{} to be ssh-ready."
@@ -437,6 +433,17 @@ class WolphinProject(object):
             raise SSHTimeoutError(error_message)
 
         return instances
+
+    def _all_instances_ssh_ready(self, instances):
+        self.logger.debug("Waiting for {} instances to be ssh ready"
+                          "(refreshed every {} secs., max {} times.)"
+                          .format(len(instances),
+                                  self.config.max_wait_duration,
+                                  self.config.max_wait_tries))
+
+        all_instances_ready, status_table = self._check_instances_for_ssh(instances)
+        self.logger.debug("\n{}".format(status_table))
+        return all_instances_ready
 
     def _check_instances_for_ssh(self, instances):
         """
