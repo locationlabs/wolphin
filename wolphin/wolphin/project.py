@@ -66,9 +66,7 @@ class WolphinProject(object):
         self.logger.info("Waiting for all instances to start ....")
         self._wait_for_transition(healthy, new_state_code=self.STATES['running'])
 
-        print wait_for_ssh
         if wait_for_ssh:
-            print "waiting ssh"
             self._wait_for_ssh(healthy)
 
         self.logger.info("{} ec2 instances ready for project"

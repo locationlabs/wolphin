@@ -74,7 +74,6 @@ def controller():
                         help="Set the logging level, e.g. '--log DEBUG' to set the level to DEBUG.")
 
     args, extra = parser.parse_known_args()
-    print "waitforsshis", args.wait_for_ssh
     project = _make_project(args)
 
     # get selector
