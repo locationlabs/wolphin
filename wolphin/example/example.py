@@ -61,13 +61,19 @@ def controller():
                              "a batch. Use this option if there is a risk of running of available "
                              " instances on ec2 if relinquished in bulk.")
 
+    parser.add_argument("--no-wait-ssh",
+                        dest="wait_for_ssh",
+                        action="store_false",
+                        default=True,
+                        help="Used with the 'create' and 'start' commands to indicate that "
+                             "wolphin should not wait for the project's instances to be ssh-ready.")
+
     parser.add_argument("--log",
                         dest="logging_level",
                         default='INFO',
                         help="Set the logging level, e.g. '--log DEBUG' to set the level to DEBUG.")
 
     args, extra = parser.parse_known_args()
-
     project = _make_project(args)
 
     # get selector
@@ -77,12 +83,12 @@ def controller():
         if args.command == "status":
             status_info = project.status(selector=selector)
         elif args.command == "create":
-            status_info = project.create()
+            status_info = project.create(wait_for_ssh=args.wait_for_ssh)
         elif args.command == "info":
             for _ in wolphin_project(project, selector=selector):
                 run("uname -a; users")
         elif args.command == "start":
-            status_info = project.start(selector=selector)
+            status_info = project.start(selector=selector, wait_for_ssh=args.wait_for_ssh)
         elif args.command == "stop":
             status_info = project.stop(selector=selector)
         elif args.command == "reboot":

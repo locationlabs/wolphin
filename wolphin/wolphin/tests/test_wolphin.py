@@ -17,6 +17,7 @@ class TestWolphin(object):
         config.validate = Mock()
         with patch('wolphin.project.connect_to_region', Mock(return_value=MockEC2Connection())):
             self.project = WolphinProject.new(config)
+            self.project._wait_for_ssh = Mock()
 
     def _multi_state_setup(self):
         """Sets up an initial project state with instances in varied states"""
@@ -76,6 +77,7 @@ class TestWolphin(object):
 
         eq_(0, len(self.project.conn.INSTANCES))
         self.project.create()
+        eq_(1, self.project._wait_for_ssh.call_count)
         ok_(self.project.config.min_instance_count
             <= len(self.project.conn.INSTANCES)
             <= self.project.config.max_instance_count)
@@ -112,6 +114,9 @@ class TestWolphin(object):
 
         stopping, stopped, shutting_down, terminated, pending, running = self._multi_state_setup()
         self.project.start()
+        # _wait_for_ssh would be called twice,
+        # once during _multi_state_setup and second during start.
+        eq_(2, self.project._wait_for_ssh.call_count)
         self._assert_post_action_multi_state('running',
                                              set(stopping) | set(stopped)
                                              | set(pending) | set(running))

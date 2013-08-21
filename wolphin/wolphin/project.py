@@ -4,10 +4,11 @@ from time import sleep
 
 from boto.exception import EC2ResponseError
 from boto.ec2 import connect_to_region
+from fabric.api import hide, run, settings
 from gusset.colortable import ColorTable
 
 from wolphin.attribute_dict import AttributeDict
-from wolphin.exceptions import EC2InstanceLimitExceeded, WolphinException
+from wolphin.exceptions import EC2InstanceLimitExceeded, SSHTimeoutError, WolphinException
 from wolphin.selector import DefaultSelector
 
 
@@ -43,9 +44,12 @@ class WolphinProject(object):
 
         return project
 
-    def create(self):
+    def create(self, wait_for_ssh=True):
         """
-        Creates a new wolphin project and the requested number of ec2 instances for the project
+        Creates a new wolphin project and the requested number of ec2 instances for the project.
+
+        :param wait_for_ssh: (optional) defaults to True, set to False if wolphin should not wait
+         for the project's ec2 instances to be ssh-ready.
         """
 
         self.logger.info("Finding any existing reusable hosts .... ")
@@ -61,6 +65,9 @@ class WolphinProject(object):
         # wait for all the healthy ones to be running.
         self.logger.info("Waiting for all instances to start ....")
         self._wait_for_transition(healthy, new_state_code=self.STATES['running'])
+
+        if wait_for_ssh:
+            self._wait_for_ssh(healthy)
 
         self.logger.info("{} ec2 instances ready for project"
                          .format(len(self.get_instances_in_states([self.STATES['running']]))))
@@ -120,8 +127,14 @@ class WolphinProject(object):
         return (max(0, *[self._get_instance_number(instance) for instance in instances])
                 if instances else 0)
 
-    def start(self, selector=None):
-        """Start the appropriate ec2 instance(s) based on ``self.config``"""
+    def start(self, selector=None, wait_for_ssh=True):
+        """
+        Start the appropriate ec2 instance(s) based on ``self.config``.
+
+        :param selector: (optional) the `class:wolphin.selector.Selector` to be used.
+        :param wait_for_ssh: (optional) defaults to True, set to False if wolphin should not wait
+         for the project's ec2 instances to be ssh-ready.
+        """
 
         # wait for the stopping instances to finish stopping as they cannot be started if
         # they are in the middle of stopping.
@@ -139,6 +152,12 @@ class WolphinProject(object):
             instance.start()
 
         self._wait_for_starting_instances(instances=instances)
+
+        if wait_for_ssh:
+            instances = self.get_instances_in_states([self.STATES['running']],
+                                                     selector=selector)
+            self._wait_for_ssh(instances)
+
         self.logger.info("Finished starting.")
         return self.status(selector)
 
@@ -349,42 +368,119 @@ class WolphinProject(object):
         if ``new_code is set, then waits till all the ``instances`` get to the ``new_state_code``.
         """
 
-        max_tries = self.config.max_wait_tries
-        refresh_rate = self.config.max_wait_duration
+        if not instances:
+            return
+        for _ in range(self.config.max_wait_tries):
+            if self._all_instances_have_transitioned(instances, state_code, new_state_code):
+                break
+            sleep(self.config.max_wait_duration)
+        else:
+            self.logger.warning("Timed out while waiting for instances' state transition, "
+                                "will not wait anymore, continuing ....")
+
+        return instances
+
+    def _all_instances_have_transitioned(self, instances, state_code, new_state_code):
+        self.logger.debug("Waiting for {} instances to go from {} to {} "
+                          "(refreshed every {} secs., max {} secs.)"
+                          .format(len(instances),
+                                  _inverse_lookup(self.STATES, state_code),
+                                  _inverse_lookup(self.STATES, new_state_code),
+                                  self.config.max_wait_duration,
+                                  self.config.max_wait_tries * self.config.max_wait_duration))
+
+        all_instances_ready, status_table = self._check_instances_for_transition(instances,
+                                                                                 state_code,
+                                                                                 new_state_code)
+        self.logger.debug("\n{}".format(status_table))
+        return all_instances_ready
+
+    def _check_instances_for_transition(self, instances, state_code, new_state_code):
+        """
+        Checks if the ``instances`` have transitioned out of the ``state_code`` to the
+        ``new_state_code`` and returns True if all of them have, False otherwise along with the
+        statuses of all of them.
+        """
+
+        keep_waiting = False
+        status_table = ColorTable('instance', 'state')
+        for instance in instances:
+            instance.update()
+            status_table.add(instance="{}|{}".format(instance.id, instance.tags.get("Name")),
+                             state="{}|{}".format(instance.state_code, instance.state))
+
+            if ((state_code is not None and instance.state_code == state_code) or
+                    (new_state_code is not None and instance.state_code != new_state_code)):
+                keep_waiting = True
+        return not keep_waiting, status_table
+
+    def _wait_for_ssh(self, instances):
+        """
+        Waits until the ``instances`` are ssh-ready.
+        """
 
         if not instances:
             return
-        for attempt in range(max_tries):
-            instance_count = len(instances)
-            self.logger.debug("Waiting for {} instances to go from {} to {} "
-                              "(refreshed every {} secs., max {} secs.)"
-                              .format(instance_count,
-                                      _inverse_lookup(self.STATES, state_code),
-                                      _inverse_lookup(self.STATES, new_state_code),
-                                      refresh_rate,
-                                      max_tries * refresh_rate))
-
-            keep_waiting = False
-            color_table = ColorTable('instance', 'state')
-            for instance in instances:
-                instance.update()
-                color_table.add(instance="{}|{}".format(instance.id, instance.tags.get("Name")),
-                                state="{}|{}".format(instance.state_code, instance.state))
-
-                if ((state_code is not None and instance.state_code == state_code) or
-                        (new_state_code is not None and instance.state_code != new_state_code)):
-                    keep_waiting = True
-
-            self.logger.debug("\n{}".format(color_table))
-            if not keep_waiting:
+        for _ in range(self.config.max_wait_tries):
+            if self._all_instances_ssh_ready(instances):
                 break
-            if attempt == max_tries - 1:
-                self.logger.warning("!! Max amount of wait reached, "
-                                    "will not wait anymore, continuing ....")
-            else:
-                sleep(refresh_rate)
+            sleep(self.config.max_wait_duration)
+        else:
+            error_message = ("Timed out when waiting for some or all instances of project:"
+                             "{} to be ssh-ready."
+                             .format(self.config.project))
+            self.logger.error(error_message)
+            raise SSHTimeoutError(error_message)
 
         return instances
+
+    def _all_instances_ssh_ready(self, instances):
+        self.logger.debug("Waiting for {} instances to be ssh ready"
+                          "(refreshed every {} secs., max {} times.)"
+                          .format(len(instances),
+                                  self.config.max_wait_duration,
+                                  self.config.max_wait_tries))
+
+        all_instances_ready, status_table = self._check_instances_for_ssh(instances)
+        self.logger.debug("\n{}".format(status_table))
+        return all_instances_ready
+
+    def _check_instances_for_ssh(self, instances):
+        """
+        Checks if the ``instances`` are ssh-ready; returns True if they are, False otherwise,
+        along with the statuses of all of them.
+        """
+
+        not_ready = False
+        status_table = ColorTable('instance', 'ssh_ready')
+        for instance in instances:
+            instance.update()
+            instance_is_ssh_ready = self._check_if_ssh_ready(instance)
+            not_ready = not_ready or not instance_is_ssh_ready
+
+            status_table.add(instance="{}|{}".format(instance.id, instance.tags.get("Name")),
+                             ssh_ready=str(instance_is_ssh_ready))
+        return not not_ready, status_table
+
+    def _check_if_ssh_ready(self, instance):
+        """
+        Tries to ssh into an ``instance`` using the project's config; returns True if it was
+        successful, False otherwise.
+        """
+
+        if not instance.ip_address:
+            # if the host is not ready yet, it may not even have a host string
+            # which would mean it is definitely not ready for ssh yet.
+            return False
+        try:
+            with settings(hide('everything'),
+                          host_string=instance.ip_address,
+                          user=self.config.user,
+                          key_filename=self.config.ssh_key_file):
+                run("hostname")
+        except:
+            return False
+        return True
 
     def _wait_for_starting_instances(self, instances=None, selector=None):
         self.logger.info("Waiting for pending instances to start ....")
