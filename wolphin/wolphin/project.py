@@ -78,7 +78,7 @@ class WolphinProject(object):
         # terminate some existing ones if they are extra.
         already_present = len(healthy)
         max_number_needed = self.config.max_instance_count - already_present
-        new_instances = []
+
         if max_number_needed < 0:
             self.logger.info("Terminating extra instances ....")
             self.terminate(instances=healthy[max_number_needed:])
@@ -91,15 +91,13 @@ class WolphinProject(object):
             self.logger.info("More needed from Amazon: between {} and {} instances"
                              .format(min_number_needed, max_number_needed))
             new_instances = self._create_extra_instances(min_number_needed, max_number_needed)
+            healthy.extend(new_instances)
 
-        # restart the healthy instances.
+        # start non running instances.
         for instance in healthy:
-            try:
-                instance.reboot()
-            except EC2ResponseError:
+            if instance.state != 'running':
                 instance.start()
 
-        healthy.extend(new_instances)
 
     def _create_extra_instances(self, min_number_needed, max_number_needed):
 
