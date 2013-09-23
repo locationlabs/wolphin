@@ -1,6 +1,5 @@
-import re
-
 from os.path import expanduser, abspath, exists, join
+import re
 
 from wolphin.exceptions import InvalidWolphinConfiguration
 
