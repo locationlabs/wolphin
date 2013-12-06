@@ -1,10 +1,8 @@
 #!/usr/bin/env python
-
 from setuptools import setup, find_packages
 
-__version__ = '1.0'
+from wolphin import __version__
 
-# Jenkins will replace __build__ with a unique value.
 __build__ = ''
 
 setup(name='wolphin',
@@ -13,18 +11,18 @@ setup(name='wolphin',
                   'It can manage Amazon ec2 instances for your project.',
       author='Location Labs',
       author_email='info@locationlabs.com',
-      url='http://locationlabs.com',
+      url='http://www.locationlabs.com',
       packages=find_packages(exclude=['*.tests']),
       setup_requires=[
           'nose>=1.0',
       ],
       install_requires=[
-          'boto>=2.9.7',
-          'Fabric>=1.4.3',
-          'gusset>=1.2'
+          'boto>=2.19.0',
+          'Fabric>=1.8.0',
+          'gusset>=1.3',
       ],
       tests_require=[
-          'mock>=1.0'
+          'mock>=1.0.1'
       ],
       test_suite='wolphin.tests',
       )

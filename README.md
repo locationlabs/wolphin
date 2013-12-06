@@ -2,6 +2,8 @@ Wolphin
 =======
 A Python library that manages ec2 instances.
 
+[![Build Status](https://travis-ci.org/locationlabs/wolphin.png)](https://travis-ci.org/locationlabs/wolphin)
+
 ----
 Motivation
 ----------
