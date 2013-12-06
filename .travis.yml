@@ -4,3 +4,11 @@ python:
 - pypy
 install: pip install . --use-mirrors
 script: python setup.py nosetests
+deploy:
+  provider: pypi
+  user: jessemyers
+  password:
+    secure: eEzhJOh1FnY0v3yx4sH59biaVTVqsNpoYFwaOgMRyou9e3Hl8uXkq4O9ATde69yKQSWXaCti+pkeS8G8RkdTHtuFWgHlM8bl1ly6gth+pZoKs8BnVffnN+PlRUShzWDkf9zuTZDohzvo2bIQHrQQn7vIUeasIgWxtPH7OI9CATk=
+  on:
+    tags: true
+    repo: locationlabs/wolphin
