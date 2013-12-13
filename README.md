@@ -3,8 +3,11 @@ Wolphin
 A Python library that manages ec2 instances.
 
 [![Build Status](https://travis-ci.org/locationlabs/wolphin.png)](https://travis-ci.org/locationlabs/wolphin)
+[![PyPi version](https://pypip.in/v/wolphin/badge.png)](https://pypi.python.org/pypi/wolphin)
+Installation
+------------
+    $ pip install wolphin
 
-----
 Motivation
 ----------
 Many of our projects use virtual machine instances to generate load for capacity and scalability
